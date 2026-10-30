@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+obj_dir/
+*.vcd
+*.fst
+*.log
+coverage.dat
+.DS_Store
