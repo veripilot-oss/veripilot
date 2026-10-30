@@ -1,0 +1,73 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{longtable,array,booktabs,enumitem,hyperref}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+\title{VeriPilot: Decisions for the Whole Team}
+\author{Team of five $\cdot$ with the industrial mentor}
+\date{Draft started 30 Oct 2026}
+
+\begin{document}
+\maketitle
+
+Each item below needs all five of us to agree. Fill in the \textbf{Decision}, \textbf{Date} and \textbf{Owner} once settled. Items marked \emph{Blocking} must be closed before the stated milestone.
+
+\section*{How we decide}
+\begin{itemize}[nosep]
+  \item Propose an option, discuss for a few days, then decide together. Record the result here.
+  \item Anything about licensing, naming or making the repo public is decided by all five, not by one person.
+  \item Ask the industrial mentor for input on items marked (M).
+\end{itemize}
+
+\section{Blocking before the repository goes public}
+\begin{longtable}{p{3.2cm} p{5.3cm} p{2.2cm} p{3.8cm}}
+\toprule
+\textbf{Decision} & \textbf{Options / notes} & \textbf{Blocking?} & \textbf{Result (date, owner)} \\
+\midrule
+\endhead
+Licence for our own code & MIT (simplest, permissive) or Apache-2.0 (adds a patent grant). Must be compatible with the licences of tools we reuse. Check each repo's licence first; do not copy code from unlicensed repos. & Before public push & \\
+Project name & Keep ``VeriPilot'' only if GitHub and PyPI searches show it is free. Fallbacks in the proposal: BugBloom, CoverQuest, SeedSense. & Before public push & \\
+Where the repo lives & Personal account of one member, or a GitHub organisation (better for five owners). & Before public push & \\
+Contribution rules & Pull requests only, one reviewer, protected \texttt{main}. Do we require a sign-off (DCO) on commits? & Before first PR & \\
+\bottomrule
+\end{longtable}
+
+\section{Technical decisions}
+\begin{longtable}{p{3.2cm} p{5.3cm} p{2.2cm} p{3.8cm}}
+\toprule
+\textbf{Decision} & \textbf{Options / notes} & \textbf{Needed by} & \textbf{Result (date, owner)} \\
+\midrule
+\endhead
+Benchmark designs (M) & 4 to 6 small open designs, e.g.\ UART, SPI, FIFO, timer. Must run on Verilator, so avoid heavy UVM. & Week 4 (13--20 Nov) & \\
+Planted-bug protocol (M) & How many bugs (10--20 per design), which types, who plants them, how we record the ground truth. & Week 3 & \\
+Linters to support & Verilator \texttt{--lint-only} first. Add a second linter (e.g.\ Verible) later? & Week 3 & \\
+Python version and tooling & Python 3.10 on current machines. Virtual environment, dependency file, formatter and linter for our own Python. & Week 2 & \\
+Testbench style & Plain SystemVerilog, cocotb (Python), or both. & Week 2--3 & \\
+Language model for fixes & Small open model that runs locally so design code never leaves the machine. Which model and how it is run. & Build phase & \\
+Baseline protocol & Exactly how setup A (normal way) is measured, so B and C are fair comparisons. Numeric targets only after the first baseline run. & Week 3--4 & \\
+\bottomrule
+\end{longtable}
+
+\section{Team and process}
+\begin{longtable}{p{3.2cm} p{5.3cm} p{2.2cm} p{3.8cm}}
+\toprule
+\textbf{Decision} & \textbf{Options / notes} & \textbf{Needed by} & \textbf{Result (date, owner)} \\
+\midrule
+\endhead
+Role assignment & Hardware, Software 1, Software 2, Product, Project/Business. Who holds which role. & Now & \\
+Directory owners & One owner per top-level directory, matching roles. & After roles & \\
+Meeting rhythm & Weekly sync with all five, plus mentor check-ins. How often, which day. & Now & \\
+Communication channel & Group chat, issue tracker, or both. & Now & \\
+Submission owner & Who finalises the proposal form by 20 Nov. & Week 3 & \\
+Mentor expectations (M) & What the mentor reviews, how often, and what they expect to see at each milestone. & Now & \\
+\bottomrule
+\end{longtable}
+
+\section{Open questions}
+\begin{itemize}[nosep]
+  \item Do we plan an optional FPGA demo (Hardware role), or keep Demo Day purely simulation-based?
+  \item Which users do Product interview first: students, startups, or both?
+\end{itemize}
+
+\end{document}
