@@ -1,0 +1,15 @@
+name: Task
+description: A piece of work for the demo
+labels: ["task"]
+body:
+  - type: textarea
+    id: what
+    attributes: {label: What needs doing, description: One clear deliverable}
+    validations: {required: true}
+  - type: textarea
+    id: done
+    attributes: {label: Definition of done, description: How we know it is finished}
+    validations: {required: true}
+  - type: input
+    id: due
+    attributes: {label: Due date, placeholder: "e.g. 14 Nov"}

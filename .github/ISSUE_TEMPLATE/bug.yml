@@ -1,0 +1,15 @@
+name: Bug
+description: Something is broken
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: {label: What happened, description: Expected vs actual}
+    validations: {required: true}
+  - type: textarea
+    id: repro
+    attributes: {label: Steps to reproduce, description: Commands, design, seed}
+    validations: {required: true}
+  - type: input
+    id: env
+    attributes: {label: Environment, placeholder: "OS, Verilator version"}

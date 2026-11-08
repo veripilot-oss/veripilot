@@ -1,0 +1,14 @@
+# One owner per directory (see docs/work_plan.tex). Owners are requested as reviewers automatically.
+# TODO: when Vikram's GitHub username is known, make him owner of /dashboard/ and /docs/ (Product).
+
+/benchmarks/        @harishkarthik-dot
+/lint/              @suryavader
+/autofix/           @suryavader
+/regress/           @JnanadeepR09
+/coverage_advisor/  @JnanadeepR09
+/triage/            @rsarang14
+/dashboard/         @rsarang14
+/docs/              @rsarang14
+/.github/           @rsarang14
+/Dockerfile         @rsarang14
+/.devcontainer/     @rsarang14
