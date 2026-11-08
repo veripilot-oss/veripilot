@@ -1,0 +1,86 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{longtable,array,booktabs,enumitem,hyperref}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+\title{VeriPilot: Work Split and Plan to 20 November}
+\author{Team of five}
+\date{Draft, 3 Nov 2026}
+
+\begin{document}
+\maketitle
+
+\section{Goal}
+Show a working demo by \textbf{20 November 2026}. The demo runs one command on a small design and shows lint results, per-seed test results, coverage gaps and a health score on a dashboard. The guiding rule stays the same: \emph{AI suggests, the simulator verifies.}
+
+Step 1 is a thin end-to-end skeleton on a single design (a FIFO). Each stage can be crude at first. All five of us work in parallel because each role owns different directories.
+
+\section{Related work}
+Two public repositories share part of our name or scope. Neither covers our full loop.
+\begin{itemize}[nosep]
+  \item \textbf{YihanWn/VeriPilot}: a research prototype that localises and repairs Verilog bugs with an LLM and a Python golden model. It has no lint, coverage, regression or dashboard. It has one commit and no licence. It shares our name.
+  \item \textbf{fangzhigang32/RTLBench}: an ICCD 2025 benchmark of 160 designs that scores LLM-generated RTL (syntax, function, lint, readability). It measures code generation, not verification of a user's design. MIT licensed.
+\end{itemize}
+We differ by connecting lint, safe fixes, regression, coverage guidance, failure triage and progress tracking in one loop. Because of the name clash, the name decision in Section~\ref{sec:decisions} is urgent.
+
+\section{Roles}
+\begin{longtable}{p{2.6cm} p{3.2cm} p{9.2cm}}
+\toprule
+\textbf{Role} & \textbf{Owns} & \textbf{Responsibilities} \\
+\midrule
+\endhead
+Hardware lead & \texttt{benchmarks/} & Choose 4 to 6 small open designs (FIFO, UART, SPI, timer) and get them running on Verilator. Write testbenches. Plant bugs with a ground-truth file per design. Later, check that coverage and bug-detection numbers are correct. \\
+Software 1 (fixer) & \texttt{lint/}, \texttt{autofix/} & Run the linter and parse its output. Apply a fix only if the tests still pass, otherwise revert. Add a small local LLM to draft fixes once the rule-based version works. \\
+Software 2 (tester) & \texttt{regress/}, \texttt{coverage\_advisor/}, \texttt{triage/} & Run N seeds and record pass/fail per seed. Parse the coverage report and ask the LLM for stimulus that reaches uncovered cases, keeping it only if coverage rises. Build the flaky-versus-repeatable check. \\
+Product & \texttt{dashboard/}, user side of \texttt{docs/} & Interview 3 to 5 target users. Define and build the dashboard and the single health score from the results file. Write the user README and design the demo flow. \\
+Project/Business & repo, process, submission & Close the blocking decisions (name, licence, repo location, contribution rules). Run the weekly meeting and mentor contact. Own the results JSON schema. Run the baseline-versus-VeriPilot comparison. Build the demo run-sheet and slides. Submit. \\
+\bottomrule
+\end{longtable}
+
+Software 2 carries the heaviest load. If it becomes too much, move \texttt{triage/} to Software 1 once autofix is stable. Hardware has a lighter middle stretch and can help test the other stages.
+
+\section{How the roles connect}
+The roles connect through one shared \textbf{results JSON} written by each stage: lint count, per-seed results, uncovered bins and the bug list. We agree its format in the first two days (all five, about one hour). After that nobody blocks anyone.
+
+Two dependencies to watch:
+\begin{itemize}[nosep]
+  \item Software 1 and 2 need a working design from Hardware. The first FIFO is due within about three days. Until then they can use any public example.
+  \item Project/Business needs Hardware's planted-bug ground truth to score results.
+\end{itemize}
+
+\section{Timeline}
+\begin{longtable}{p{1.9cm} p{2.5cm} p{2.5cm} p{2.5cm} p{2.5cm} p{2.5cm}}
+\toprule
+\textbf{Dates} & \textbf{Hardware} & \textbf{Software 1} & \textbf{Software 2} & \textbf{Product} & \textbf{Project/ Business} \\
+\midrule
+\endhead
+3--8 Nov & FIFO running, bugs planted & Lint parser, rule-based safe-fix loop & Seed runner, coverage parser & User interviews, dashboard sketch & Schema, decisions, repo setup \\
+9--14 Nov & Second design (UART) & LLM drafts fixes & Coverage advisor, triage & Working dashboard & Baseline run \\
+15--18 Nov & Verify numbers & Fix bugs, tune & Fix bugs, tune & Polish, demo flow & Full comparison, slides \\
+19--20 Nov & \multicolumn{5}{l}{Rehearse and submit together} \\
+\bottomrule
+\end{longtable}
+
+\section{Definition of done for step 1}
+Running \texttt{veripilot run benchmarks/fifo} produces a lint count, pass/fail per seed, a list of uncovered bins and a single results JSON file.
+
+\section{Decisions needed this week}
+\label{sec:decisions}
+\begin{itemize}[nosep]
+  \item Who holds which role, and the owner of each directory.
+  \item The results JSON schema.
+  \item Project name (search GitHub and PyPI; fallbacks: BugBloom, CoverQuest, SeedSense), licence and repo location.
+  \item Testbench style (plain SystemVerilog or cocotb) and Python version.
+  \item Meeting day and communication channel.
+  \item Which small local model to use for fixes (can wait until 9 Nov).
+\end{itemize}
+
+\section{Known challenges}
+\begin{itemize}[nosep]
+  \item \textbf{Slow feedback.} A hardware regression is slower than a software unit test, so each round gets a small budget of LLM attempts.
+  \item \textbf{Weak oracle.} A test that passes and adds coverage may still check nothing. We rely on self-checking testbenches or a reference model, and on planted bugs to confirm the tests catch real faults.
+  \item \textbf{Coverage depth.} Verilator provides line and toggle coverage. Functional coverage bins need extra work.
+\end{itemize}
+
+\end{document}

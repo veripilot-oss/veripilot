@@ -1,0 +1,59 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  VERILATOR_VERSION: "5.034"
+  # OSS CAD Suite release expected to bundle Verilator 5.034.
+  # The version check below fails the job if it does not.
+  OSS_CAD_DATE: "2025-03-15"
+
+jobs:
+  test:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Cache OSS CAD Suite
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: oss-cad-suite
+          key: oss-cad-${{ runner.os }}-${{ env.OSS_CAD_DATE }}
+
+      - name: Download OSS CAD Suite
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          d="${OSS_CAD_DATE//-/}"
+          curl -fsSL -o oss.tgz "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${OSS_CAD_DATE}/oss-cad-suite-windows-x64-${d}.tgz"
+          tar -xzf oss.tgz
+          rm oss.tgz
+
+      - name: Add Verilator to PATH
+        run: |
+          echo "$GITHUB_WORKSPACE/oss-cad-suite/bin" >> "$GITHUB_PATH"
+          echo "$GITHUB_WORKSPACE/oss-cad-suite/lib" >> "$GITHUB_PATH"
+
+      - name: Check Verilator version
+        run: |
+          verilator --version
+          verilator --version | grep -q "Verilator $VERILATOR_VERSION "
+
+      - name: Install package and run tests
+        run: |
+          if [ -f pyproject.toml ]; then
+            python -m pip install -e ".[dev]" || python -m pip install -e .
+            python -m pytest
+          else
+            echo "No pyproject.toml yet, skipping Python tests"
+          fi
