@@ -6,17 +6,12 @@ on:
   pull_request:
 
 env:
+  VERILATOR_TAG: v5.034
   VERILATOR_VERSION: "5.034"
-  # OSS CAD Suite release expected to bundle Verilator 5.034.
-  # The version check below fails the job if it does not.
-  OSS_CAD_DATE: "2025-03-15"
 
 jobs:
   test:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -24,33 +19,54 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Cache OSS CAD Suite
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            git
+            make
+            autoconf
+            automake
+            flex
+            bison
+            help2man
+            perl
+            python
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Cache Verilator
         id: cache
         uses: actions/cache@v4
         with:
-          path: oss-cad-suite
-          key: oss-cad-${{ runner.os }}-${{ env.OSS_CAD_DATE }}
+          path: C:\msys64\opt\verilator
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_TAG }}
 
-      - name: Download OSS CAD Suite
+      - name: Build Verilator ${{ env.VERILATOR_TAG }}
         if: steps.cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
         run: |
-          d="${OSS_CAD_DATE//-/}"
-          curl -fsSL -o oss.tgz "https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${OSS_CAD_DATE}/oss-cad-suite-windows-x64-${d}.tgz"
-          tar -xzf oss.tgz
-          rm oss.tgz
-
-      - name: Add Verilator to PATH
-        run: |
-          echo "$GITHUB_WORKSPACE/oss-cad-suite/bin" >> "$GITHUB_PATH"
-          echo "$GITHUB_WORKSPACE/oss-cad-suite/lib" >> "$GITHUB_PATH"
+          git clone --depth 1 --branch "$VERILATOR_TAG" https://github.com/verilator/verilator /tmp/verilator
+          cd /tmp/verilator
+          autoconf
+          ./configure --prefix=/opt/verilator
+          make -j"$(nproc)"
+          make install
 
       - name: Check Verilator version
+        shell: msys2 {0}
         run: |
+          export PATH=/opt/verilator/bin:$PATH
+          export VERILATOR_ROOT=/opt/verilator/share/verilator
           verilator --version
           verilator --version | grep -q "Verilator $VERILATOR_VERSION "
 
       - name: Install package and run tests
+        shell: msys2 {0}
         run: |
+          export PATH=/opt/verilator/bin:$PATH
+          export VERILATOR_ROOT=/opt/verilator/share/verilator
           if [ -f pyproject.toml ]; then
             python -m pip install -e ".[dev]" || python -m pip install -e .
             python -m pytest
