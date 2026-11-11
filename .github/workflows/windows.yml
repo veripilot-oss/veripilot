@@ -49,6 +49,11 @@ jobs:
         run: |
           git clone --depth 1 --branch "$VERILATOR_TAG" https://github.com/verilator/verilator /tmp/verilator
           cd /tmp/verilator
+          # flex installs FlexLexer.h under /usr/include, which the UCRT64 gcc does not search
+          cp /usr/include/FlexLexer.h src/
+          cp /usr/include/FlexLexer.h /ucrt64/include/
+          # stop MSYS2 from rewriting the -DDEFENV_* path defines
+          export MSYS2_ARG_CONV_EXCL="-DDEFENV"
           autoconf
           ./configure --prefix=/opt/verilator
           make -j"$(nproc)"
