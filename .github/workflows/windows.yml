@@ -12,6 +12,8 @@ env:
 jobs:
   test:
     runs-on: windows-latest
+    # Non-blocking until the MSYS2 Verilator build is green; remove then.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
