@@ -20,6 +20,7 @@ jobs:
           python-version: "3.10"
 
       - name: Set up MSYS2
+        id: msys2
         uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -40,7 +41,7 @@ jobs:
         id: cache
         uses: actions/cache@v4
         with:
-          path: C:\msys64\opt\verilator
+          path: ${{ steps.msys2.outputs.msys2-location }}\opt\verilator
           key: verilator-${{ runner.os }}-${{ env.VERILATOR_TAG }}
 
       - name: Build Verilator ${{ env.VERILATOR_TAG }}
