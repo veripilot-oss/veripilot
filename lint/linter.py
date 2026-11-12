@@ -6,26 +6,64 @@ import os
 import re
 import json
 import yaml
+import shutil
 import subprocess
 from pathlib import Path
 
 
+def _get_verilator_cmd(args):
+    """Resolve Verilator command line across Linux and Windows MSYS2/native environments.
+    On Windows MSYS2, verilator may be a perl script without a .exe wrapper.
+    """
+    v_bin = shutil.which("verilator")
+    if v_bin:
+        # Check if v_bin is a perl script on Windows
+        if os.name == "nt" or (v_bin.endswith(".pl") or not v_bin.endswith(".exe")):
+            try:
+                # Test running directly
+                res = subprocess.run([v_bin, "--version"], capture_output=True, text=True)
+                if res.returncode == 0:
+                    return [v_bin] + args
+            except (OSError, FileNotFoundError):
+                pass
+            perl = shutil.which("perl") or "/usr/bin/perl" or "/bin/perl"
+            return [perl, v_bin] + args
+        return [v_bin] + args
+
+    # Fallbacks for Windows MSYS2 / default install paths
+    possible_paths = [
+        "/bin/verilator",
+        "/usr/bin/verilator",
+        "/opt/verilator/bin/verilator",
+        "C:/msys64/ucrt64/bin/verilator",
+        "C:/msys64/usr/bin/verilator",
+    ]
+    for p in possible_paths:
+        if os.path.exists(p):
+            perl = shutil.which("perl") or "perl"
+            return [perl, p] + args
+
+    # Default fallback
+    return ["verilator"] + args
+
+
 def get_verilator_version():
-    res = subprocess.run(["verilator", "--version"], capture_output=True, text=True, check=True)
+    cmd = _get_verilator_cmd(["--version"])
+    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
     m = re.search(r"Verilator\s+([\d.]+)", res.stdout)
     return m.group(1) if m else "5.034"
 
 
 def parse_verilator_output(output_text, default_file=""):
-    """Parse Verilator warnings and errors into structured finding dicts.
+    r"""Parse Verilator warnings and errors into structured finding dicts.
     Handles lines like:
       %Warning-PINMISSING: examples/fifo/buggy/fifo.v:90:25: Cell has missing pin...
-      %Error-BLKANDNBLK: examples/fifo/buggy/fifo.v:59:9: Unsupported...
+      %Error-BLKANDNBLK: C:\repo\examples\fifo\buggy\fifo.v:59:9: Unsupported...
     """
     findings = []
-    # Match %Warning-RULE or %Error-RULE: file:line:col: message
+    # Match %Warning-RULE or %Error-RULE: optional_drive:path:line:col: message
     pattern = re.compile(
-        r"%(?P<severity>Warning|Error)-(?P<rule>[A-Z0-9_]+):\s*(?P<file>[^:\n]+):(?P<line>\d+)(?::\d+)?:?\s*(?P<msg>[^\n]+)"
+        r"%(?P<severity>Warning|Error)-(?P<rule>[A-Z0-9_]+):\s*(?P<file>(?:[a-zA-Z]:)?[^:\n]+):(?P<line>\d+)(?::\d+)?:?\s*(?P<msg>[^\n]+)"
     )
 
     for line in output_text.splitlines():
@@ -33,16 +71,17 @@ def parse_verilator_output(output_text, default_file=""):
         if m:
             sev = "error" if m.group("severity") == "Error" else "warning"
             rule = m.group("rule")
-            filepath = m.group("file").strip()
-            # Normalize to relative path within design
-            if "buggy/" in filepath:
-                rel_file = "buggy/" + filepath.split("buggy/")[-1]
+            raw_filepath = m.group("file").strip()
+            # Normalize backslashes for cross-platform Windows/Linux compatibility
+            normalized_filepath = raw_filepath.replace("\\", "/")
+            if "buggy/" in normalized_filepath:
+                rel_file = "buggy/" + normalized_filepath.split("buggy/")[-1]
             else:
-                rel_file = os.path.basename(filepath)
-            
+                rel_file = normalized_filepath.split("/")[-1]
+
             lineno = int(m.group("line"))
             msg = m.group("msg").strip()
-            
+
             findings.append({
                 "rule": rule,
                 "file": rel_file,
@@ -74,7 +113,7 @@ def match_findings_to_bugs(findings, planted_bugs):
                 matched_id = b.get("id")
                 matched_bug_ids.add(matched_id)
                 break
-        
+
         f_copy = dict(f)
         f_copy["matched_bug_id"] = matched_id
         result_findings.append(f_copy)
@@ -92,7 +131,7 @@ def lint_design(design_name, examples_dir):
     if not buggy_file.exists():
         raise FileNotFoundError(f"Buggy file not found: {buggy_file}")
 
-    cmd = ["verilator", "--lint-only", "-Wall", str(buggy_file)]
+    cmd = _get_verilator_cmd(["--lint-only", "-Wall", str(buggy_file)])
     res = subprocess.run(cmd, capture_output=True, text=True)
     # Verilator outputs errors and warnings on stderr
     raw_output = res.stderr + "\n" + res.stdout
