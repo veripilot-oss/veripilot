@@ -4,6 +4,7 @@ compares with bugs.yaml ground truth, and writes results/lint.json.
 
 import os
 import re
+import sys
 import json
 import yaml
 import shutil
@@ -11,44 +12,37 @@ import subprocess
 from pathlib import Path
 
 
-def _get_verilator_cmd(args):
-    """Resolve Verilator command line across Linux and Windows MSYS2/native environments.
-    On Windows MSYS2, verilator may be a perl script without a .exe wrapper.
+def _get_verilator_base_cmd():
+    """Resolve Verilator base command across Linux and native Windows (MSYS2/UCRT64).
+    On Windows native Python, shutil.which('verilator') returns None because the script
+    has no .exe extension. Scans PATH for a file named 'verilator' and invokes it via
+    Perl on Windows.
     """
-    v_bin = shutil.which("verilator")
-    if v_bin:
-        # Check if v_bin is a perl script on Windows
-        if os.name == "nt" or (v_bin.endswith(".pl") or not v_bin.endswith(".exe")):
-            try:
-                # Test running directly
-                res = subprocess.run([v_bin, "--version"], capture_output=True, text=True)
-                if res.returncode == 0:
-                    return [v_bin] + args
-            except (OSError, FileNotFoundError):
-                pass
-            perl = shutil.which("perl") or "/usr/bin/perl" or "/bin/perl"
-            return [perl, v_bin] + args
-        return [v_bin] + args
+    # 1. Standard which lookup (works on Linux or Windows when .exe/.bat exists)
+    v = shutil.which("verilator")
+    if v and (v.endswith(".exe") or v.endswith(".bat") or v.endswith(".cmd")):
+        return [v]
 
-    # Fallbacks for Windows MSYS2 / default install paths
-    possible_paths = [
-        "/bin/verilator",
-        "/usr/bin/verilator",
-        "/opt/verilator/bin/verilator",
-        "C:/msys64/ucrt64/bin/verilator",
-        "C:/msys64/usr/bin/verilator",
-    ]
-    for p in possible_paths:
-        if os.path.exists(p):
-            perl = shutil.which("perl") or "perl"
-            return [perl, p] + args
+    # 2. Scan each directory in PATH for an extensionless file named "verilator"
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for d in path_dirs:
+        d = d.strip('"')
+        candidate = os.path.join(d, "verilator")
+        if os.path.isfile(candidate):
+            if sys.platform.startswith("win") or os.name == "nt":
+                perl = shutil.which("perl") or "perl"
+                return [perl, candidate]
+            return [candidate]
 
-    # Default fallback
-    return ["verilator"] + args
+    # 3. Fallbacks
+    if sys.platform.startswith("win") or os.name == "nt":
+        perl = shutil.which("perl") or "perl"
+        return [perl, "verilator"]
+    return ["verilator"]
 
 
 def get_verilator_version():
-    cmd = _get_verilator_cmd(["--version"])
+    cmd = _get_verilator_base_cmd() + ["--version"]
     res = subprocess.run(cmd, capture_output=True, text=True, check=True)
     m = re.search(r"Verilator\s+([\d.]+)", res.stdout)
     return m.group(1) if m else "5.034"
@@ -131,7 +125,7 @@ def lint_design(design_name, examples_dir):
     if not buggy_file.exists():
         raise FileNotFoundError(f"Buggy file not found: {buggy_file}")
 
-    cmd = _get_verilator_cmd(["--lint-only", "-Wall", str(buggy_file)])
+    cmd = _get_verilator_base_cmd() + ["--lint-only", "-Wall", str(buggy_file)]
     res = subprocess.run(cmd, capture_output=True, text=True)
     # Verilator outputs errors and warnings on stderr
     raw_output = res.stderr + "\n" + res.stdout
@@ -185,7 +179,6 @@ def run_all_lint(examples_dir="examples", output_path="results/lint.json"):
 
 
 if __name__ == "__main__":
-    import sys
     ex_dir = sys.argv[1] if len(sys.argv) > 1 else "examples"
     out_file = sys.argv[2] if len(sys.argv) > 2 else "results/lint.json"
     data = run_all_lint(ex_dir, out_file)
