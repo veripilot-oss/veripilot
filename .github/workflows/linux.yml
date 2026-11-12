@@ -47,7 +47,25 @@ jobs:
       - name: Check Verilator version
         run: |
           verilator --version
-          verilator --version | grep -q "Verilator $VERILATOR_VERSION " 
+          verilator --version | grep -q "Verilator $VERILATOR_VERSION "
+
+      - name: Lint golden examples
+        run: |
+          # Lint all golden designs under examples/*/golden/ requiring 0 warnings.
+          # Buggy designs under examples/*/buggy/ are skipped.
+          found=0
+          for rtl in examples/*/golden/*.v; do
+            if [ -f "$rtl" ]; then
+              found=1
+              echo "==> Linting golden design: $rtl"
+              verilator --lint-only -Wall "$rtl"
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No golden examples found yet, skipping."
+          else
+            echo "All golden examples passed lint cleanly."
+          fi
 
       - name: Install package and run tests
         run: |

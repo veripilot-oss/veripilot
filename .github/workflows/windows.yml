@@ -108,6 +108,24 @@ jobs:
           ./obj_dir/Vtb | tee out.txt
           grep -q PASS out.txt
 
+      - name: Lint golden examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          found=0
+          for rtl in examples/*/golden/*.v; do
+            if [ -f "$rtl" ]; then
+              found=1
+              echo "==> Linting golden design: $rtl"
+              verilator --lint-only -Wall "$rtl"
+            fi
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "No golden examples found yet, skipping."
+          else
+            echo "All golden examples passed lint cleanly."
+          fi
+
       - name: Install package and run tests
         shell: msys2 {0}
         run: |
