@@ -108,6 +108,34 @@ def parse_annotated_coverage(annotated_dir: Path, source_file: Path, repo_root: 
     return round(percent, 2), uncovered
 
 
+def _resolve_tool_cmd(tool_name: str) -> list[str]:
+    """Resolve a tool executable (e.g. 'verilator' or 'verilator_coverage') across Linux and Windows.
+    On Windows native Python, shutil.which('verilator') returns None because the Perl script
+    has no .exe extension. Scans PATH for an extensionless script and runs it with Perl.
+    """
+    # 1. Standard which lookup (works on Linux or Windows when .exe/.bat exists)
+    found = shutil.which(tool_name)
+    if found and (found.endswith(".exe") or found.endswith(".bat") or found.endswith(".cmd")):
+        return [found]
+
+    # 2. Scan PATH for extensionless file or perl script
+    path_dirs = os.environ.get("PATH", "").split(os.pathsep)
+    for d in path_dirs:
+        d = d.strip('"')
+        candidate = os.path.join(d, tool_name)
+        if os.path.isfile(candidate):
+            if sys.platform.startswith("win") or os.name == "nt":
+                perl = shutil.which("perl") or "perl"
+                return [perl, candidate]
+            return [candidate]
+
+    # 3. Fallbacks
+    if sys.platform.startswith("win") or os.name == "nt":
+        perl = shutil.which("perl") or "perl"
+        return [perl, tool_name]
+    return [tool_name]
+
+
 def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     """Build, execute, and analyze coverage for a given example design."""
     example_dir = root_dir / "examples" / design_name
@@ -133,8 +161,8 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     top_module = f"tb_{design_name}"
 
     # 1. Compile with Verilator including -CFLAGS -std=gnu++17
-    build_cmd = [
-        "verilator",
+    verilator_bin = _resolve_tool_cmd("verilator")
+    build_cmd = verilator_bin + [
         "--binary",
         "--timing",
         "--coverage",
@@ -148,7 +176,10 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
         str(golden_rtl),
         str(tb_file)
     ]
-    subprocess.run(build_cmd, check=True, cwd=example_dir, capture_output=True, text=True)
+    res_build = subprocess.run(build_cmd, cwd=example_dir, capture_output=True, text=True)
+    if res_build.returncode != 0:
+        err_msg = res_build.stderr.strip() or res_build.stdout.strip()
+        raise RuntimeError(f"Verilator build failed for {design_name} (code {res_build.returncode}):\n{err_msg}")
 
     # 2. Run simulation binary
     exe_name = f"V{top_module}"
@@ -157,17 +188,23 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     else:
         exe_path = obj_dir / exe_name
 
-    subprocess.run([str(exe_path)], check=True, cwd=example_dir, capture_output=True, text=True)
+    res_sim = subprocess.run([str(exe_path)], cwd=example_dir, capture_output=True, text=True)
+    if res_sim.returncode != 0:
+        err_msg = res_sim.stderr.strip() or res_sim.stdout.strip()
+        raise RuntimeError(f"Simulation execution failed for {design_name} (code {res_sim.returncode}):\n{err_msg}")
 
     # 3. Annotate coverage
     annotate_dir.mkdir(parents=True, exist_ok=True)
-    cov_cmd = [
-        "verilator_coverage",
+    cov_bin = _resolve_tool_cmd("verilator_coverage")
+    cov_cmd = cov_bin + [
         "--annotate",
         str(annotate_dir),
         str(coverage_dat)
     ]
-    subprocess.run(cov_cmd, check=True, cwd=example_dir, capture_output=True, text=True)
+    res_cov = subprocess.run(cov_cmd, cwd=example_dir, capture_output=True, text=True)
+    if res_cov.returncode != 0:
+        err_msg = res_cov.stderr.strip() or res_cov.stdout.strip()
+        raise RuntimeError(f"verilator_coverage failed for {design_name} (code {res_cov.returncode}):\n{err_msg}")
 
     # 4. Parse annotated coverage with relative paths and declaration filtering
     covered_pct, uncovered = parse_annotated_coverage(annotate_dir, golden_rtl, repo_root=root_dir)
@@ -198,6 +235,7 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary = {}
+    had_error = False
     for d in args.designs:
         print(f"[*] Running coverage analysis on {d}...")
         try:
@@ -208,9 +246,10 @@ def main() -> int:
                 json.dump(report, f, indent=2)
             print(f"[+] {d}: {report['covered_percent']}% covered ({len(report['uncovered'])} uncovered points) -> {out_file}")
         except Exception as e:
+            had_error = True
             print(f"[-] Error evaluating {d}: {e}")
 
-    return 0
+    return 1 if had_error else 0
 
 
 if __name__ == "__main__":

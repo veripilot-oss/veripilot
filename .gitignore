@@ -6,6 +6,7 @@ obj_dir/
 *.fst
 *.log
 coverage.dat
+coverage_advisor/reports/
 .DS_Store
 *.aux
 *.out
