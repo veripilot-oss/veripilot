@@ -1,0 +1,79 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  VERILATOR_TAG: v5.034
+  VERILATOR_VERSION: "5.034"
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up MSYS2
+        id: msys2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            git
+            make
+            autoconf
+            automake
+            flex
+            bison
+            help2man
+            perl
+            python
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Cache Verilator
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.msys2.outputs.msys2-location }}\opt\verilator
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_TAG }}
+
+      - name: Build Verilator ${{ env.VERILATOR_TAG }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: |
+          git clone --depth 1 --branch "$VERILATOR_TAG" https://github.com/verilator/verilator /tmp/verilator
+          cd /tmp/verilator
+          # flex installs FlexLexer.h under /usr/include, which the UCRT64 gcc does not search
+          cp /usr/include/FlexLexer.h src/
+          cp /usr/include/FlexLexer.h /ucrt64/include/
+          # stop MSYS2 from rewriting the -DDEFENV_* path defines
+          export MSYS2_ARG_CONV_EXCL="-DDEFENV"
+          autoconf
+          ./configure --prefix=/opt/verilator
+          make -j"$(nproc)"
+          make install
+
+      - name: Check Verilator version
+        shell: msys2 {0}
+        run: |
+          export PATH=/opt/verilator/bin:$PATH
+          verilator --version
+          verilator --version | grep -q "Verilator $VERILATOR_VERSION "
+
+      - name: Install package and run tests
+        shell: msys2 {0}
+        run: |
+          export PATH=/opt/verilator/bin:$PATH
+          if [ -f pyproject.toml ]; then
+            python -m pip install -e ".[dev]" || python -m pip install -e .
+            python -m pytest
+          else
+            echo "No pyproject.toml yet, skipping Python tests"
+          fi
