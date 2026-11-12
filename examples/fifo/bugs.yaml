@@ -38,13 +38,13 @@ bugs:
     fix: Sized literal to 16 bits as 16'h00A5.
   - id: 7
     file: buggy/fifo.v
-    line: 124
-    rule: BLKSEQ
-    description: Blocking assignment = used for seq_busy_flag inside sequential posedge clk process.
-    fix: Use non-blocking assignment <= for sequential register seq_busy_flag.
+    line: 59
+    rule: BLKANDNBLK
+    description: seq_busy_flag is assigned with blocking = inside the posedge block and non-blocking <= elsewhere, mixing both on the same variable.
+    fix: Use non-blocking assignment <= consistently for seq_busy_flag in all sequential blocks.
   - id: 8
     file: buggy/fifo.v
-    line: 129
+    line: 64
     rule: BLKANDNBLK
     description: Variable mixed_assign_reg assigned with both blocking = and non-blocking <= across paths.
     fix: Consistently use non-blocking assignment <= for mixed_assign_reg in sequential blocks.
@@ -68,7 +68,7 @@ bugs:
     fix: Use blocking assignment = for combinational logic assignments.
   - id: 12
     file: buggy/fifo.v
-    line: 150
+    line: 11
     rule: SYNCASYNCNET
     description: Signal reset is used as synchronous reset in main logic and asynchronous posedge reset elsewhere.
     fix: Adopt uniform synchronous reset discipline throughout the module.
