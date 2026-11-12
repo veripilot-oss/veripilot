@@ -1,0 +1,86 @@
+design: timer
+bugs:
+  - id: 1
+    file: buggy/timer.v
+    line: 16
+    rule: UNUSEDSIGNAL
+    description: Input port debug_monitor_pin is declared on the module interface but never used.
+    fix: Remove debug_monitor_pin from the port list or connect it to internal logic.
+  - id: 2
+    file: buggy/timer.v
+    line: 21
+    rule: UNDRIVEN
+    description: Output port undriven_status_pin is declared on the module interface but never driven.
+    fix: Drive undriven_status_pin with appropriate logic or remove it if not needed.
+  - id: 3
+    file: buggy/timer.v
+    line: 33
+    rule: UNUSEDSIGNAL
+    description: Internal register run_cycles_reg is declared but never driven nor read.
+    fix: Remove the unused run_cycles_reg declaration.
+  - id: 4
+    file: buggy/timer.v
+    line: 38
+    rule: UNDRIVEN
+    description: Internal net undriven_overflow_bit is declared and read in logic but never driven.
+    fix: Drive undriven_overflow_bit with valid logic or remove its usage.
+  - id: 5
+    file: buggy/timer.v
+    line: 110
+    rule: WIDTHTRUNC
+    description: 16-bit counter is assigned to 8-bit trunc_count_reg causing upper 8 bits truncation.
+    fix: Match trunc_count_reg width to 16 bits or explicitly slice the required lower bits.
+  - id: 6
+    file: buggy/timer.v
+    line: 115
+    rule: WIDTHEXPAND
+    description: 8-bit constant 8'hA5 is assigned to 16-bit expand_data_reg without explicit width extension.
+    fix: Sized literal to 16 bits as 16'h00A5.
+  - id: 7
+    file: buggy/timer.v
+    line: 123
+    rule: BLKSEQ
+    description: Blocking assignment = used for seq_busy_flag inside sequential posedge clk process.
+    fix: Use non-blocking assignment <= for sequential register seq_busy_flag.
+  - id: 8
+    file: buggy/timer.v
+    line: 128
+    rule: BLKANDNBLK
+    description: Variable mixed_assign_reg assigned with both blocking = and non-blocking <= across paths.
+    fix: Consistently use non-blocking assignment <= for mixed_assign_reg in sequential blocks.
+  - id: 9
+    file: buggy/timer.v
+    line: 157
+    rule: LATCH
+    description: Combinational always block infers latch for inferred_latch_reg because of missing else branch.
+    fix: Provide a complete else branch or default value assignment before conditionals.
+  - id: 10
+    file: buggy/timer.v
+    line: 165
+    rule: CASEINCOMPLETE
+    description: Case statement on mode_state incompletely covers values with missing pattern and no default.
+    fix: Add default case branch to cover all possible state patterns.
+  - id: 11
+    file: buggy/timer.v
+    line: 175
+    rule: COMBDLY
+    description: Non-blocking assignment <= used in purely combinational always block.
+    fix: Use blocking assignment = for combinational logic assignments.
+  - id: 12
+    file: buggy/timer.v
+    line: 139
+    rule: SYNCASYNCNET
+    description: Signal reset is used as synchronous reset in main logic and asynchronous posedge reset elsewhere.
+    fix: Adopt uniform synchronous reset discipline throughout the module.
+  - id: 13
+    file: buggy/timer.v
+    line: 84
+    rule: PINMISSING
+    description: Submodule instance timer_zero_detector omits connection to output port is_zero.
+    fix: Explicitly connect is_zero port to a wire or empty port list.
+  - id: 14
+    file: buggy/timer.v
+    line: 92
+    rule: UNOPTFLAT
+    description: Circular combinational dependency between comb_loop_a and comb_loop_b forms zero-delay loop.
+    fix: Break combinational feedback loop with a clocked register flip-flop.
