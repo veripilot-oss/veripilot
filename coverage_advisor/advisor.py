@@ -19,8 +19,39 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 
-def parse_annotated_coverage(annotated_dir: Path, source_file: Path) -> tuple[float, list[dict[str, Any]]]:
-    """Parse Verilator annotated coverage file to extract coverage stats and uncovered lines."""
+def is_declaration_line(code: str) -> bool:
+    """Return True if a line is a declaration or structural definition rather than an executable statement/branch."""
+    stripped = code.strip()
+    if not stripped or stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+        return True
+
+    # Declaration keywords at start of line
+    decl_patterns = [
+        r"^(?:input|output|inout)\b",
+        r"^(?:wire|reg|integer|real|time)\b",
+        r"^(?:parameter|localparam)\b",
+        r"^(?:module|endmodule)\b",
+        r"^(?:`default_nettype|`timescale|`include|`define|`ifdef|`ifndef|`endif)\b",
+    ]
+    for pat in decl_patterns:
+        if re.search(pat, stripped):
+            return True
+
+    # Port list lines (e.g. "input wire reset," or "[7:0] data_in,")
+    if re.match(r"^(?:input|output|inout|wire|reg|\w+)?\s*(?:\[[^\]]+\])?\s*\w+\s*[,;)]", stripped):
+        if any(kw in stripped for kw in ["input", "output", "inout", "wire", "reg", "parameter", "localparam"]):
+            return True
+
+    return False
+
+
+def parse_annotated_coverage(annotated_dir: Path, source_file: Path, repo_root: Path | None = None) -> tuple[float, list[dict[str, Any]]]:
+    """Parse Verilator annotated coverage file to extract coverage stats and uncovered lines.
+    
+    Filters out port declarations and structural keywords so only actual statement
+    and branch lines are reported as uncovered.
+    Uses repo-root-relative path for the 'file' field.
+    """
     annotated_file = annotated_dir / source_file.name
     if not annotated_file.exists():
         # Fallback: search for any annotated file matching source name
@@ -29,6 +60,15 @@ def parse_annotated_coverage(annotated_dir: Path, source_file: Path) -> tuple[fl
             annotated_file = candidates[0]
         else:
             return 0.0, []
+
+    # Compute relative file path to repo root if possible
+    if repo_root:
+        try:
+            rel_file_path = source_file.resolve().relative_to(repo_root.resolve()).as_posix()
+        except Exception:
+            rel_file_path = source_file.as_posix()
+    else:
+        rel_file_path = source_file.as_posix()
 
     uncovered: list[dict[str, Any]] = []
     total_points = 0
@@ -39,26 +79,27 @@ def parse_annotated_coverage(annotated_dir: Path, source_file: Path) -> tuple[fl
     # %000000   wire foo;  (0 hits)
     #  000010   wire bar;  (10 hits)
     #  ######   uncovered branch/statement
-    # Or count prefixed lines
     line_num = 0
     with open(annotated_file, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line_num += 1
-            # Check for coverage count markers at line start
-            # Verilator formats annotate lines as:
-            # '%000000' or ' 000000' or '######'
             match = re.match(r"^\s*([%#]?\d+|######)\s+(.*)$", line)
             if match:
                 prefix = match.group(1).strip()
+                code_text = match.group(2).strip()
+                
+                # Check if it's a declaration/port definition that shouldn't be counted as an uncovered statement/branch gap
+                is_decl = is_declaration_line(code_text)
+
                 if prefix.startswith("%") or prefix == "######" or prefix == "0" or prefix == "%000000":
-                    # Uncovered item
-                    total_points += 1
-                    uncovered.append({
-                        "file": str(source_file.as_posix()),
-                        "line": line_num,
-                        "kind": "line_or_branch",
-                        "code": match.group(2).strip()
-                    })
+                    if not is_decl:
+                        total_points += 1
+                        uncovered.append({
+                            "file": rel_file_path,
+                            "line": line_num,
+                            "kind": "line_or_branch",
+                            "code": code_text
+                        })
                 elif prefix.isdigit() and int(prefix) > 0:
                     total_points += 1
                     covered_points += 1
@@ -91,13 +132,15 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
 
     top_module = f"tb_{design_name}"
 
-    # 1. Compile with Verilator
+    # 1. Compile with Verilator including -CFLAGS -std=gnu++17
     build_cmd = [
         "verilator",
         "--binary",
         "--timing",
         "--coverage",
         "-Wno-fatal",
+        "-CFLAGS",
+        "-std=gnu++17",
         "--top-module",
         top_module,
         "--Mdir",
@@ -114,7 +157,7 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     else:
         exe_path = obj_dir / exe_name
 
-    sim_res = subprocess.run([str(exe_path)], check=True, cwd=example_dir, capture_output=True, text=True)
+    subprocess.run([str(exe_path)], check=True, cwd=example_dir, capture_output=True, text=True)
 
     # 3. Annotate coverage
     annotate_dir.mkdir(parents=True, exist_ok=True)
@@ -126,8 +169,8 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     ]
     subprocess.run(cov_cmd, check=True, cwd=example_dir, capture_output=True, text=True)
 
-    # 4. Parse annotated coverage
-    covered_pct, uncovered = parse_annotated_coverage(annotate_dir, golden_rtl)
+    # 4. Parse annotated coverage with relative paths and declaration filtering
+    covered_pct, uncovered = parse_annotated_coverage(annotate_dir, golden_rtl, repo_root=root_dir)
 
     # Clean up non-tracked artifacts
     if obj_dir.exists():
@@ -172,3 +215,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
