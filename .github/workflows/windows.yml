@@ -36,6 +36,7 @@ jobs:
             perl
             python
             mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
 
       - name: Cache Verilator
         id: cache
@@ -60,12 +61,52 @@ jobs:
           make -j"$(nproc)"
           make install
 
+      - name: Lay out the Verilator kit where the Windows binary looks for it
+        shell: msys2 {0}
+        run: |
+          # verilator_bin.exe takes <prefix> as its root, but make install puts
+          # include/ and the helper scripts under <prefix>/share/verilator.
+          # Do not set VERILATOR_ROOT, Verilator rejects it as inconsistent.
+          [ -d /opt/verilator/include ] || cp -r /opt/verilator/share/verilator/include /opt/verilator/include
+          cp -n /opt/verilator/share/verilator/bin/* /opt/verilator/bin/
+
       - name: Check Verilator version
         shell: msys2 {0}
         run: |
           export PATH=/opt/verilator/bin:$PATH
           verilator --version
           verilator --version | grep -q "Verilator $VERILATOR_VERSION "
+
+      - name: Smoke test lint and simulation
+        shell: msys2 {0}
+        run: |
+          # native UCRT64 python3 must come first: the MSYS python cannot open
+          # the C:/ paths in Verilator's generated makefiles
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          mkdir smoke && cd smoke
+          cat > dut.v <<'EOF'
+          module dut(input clk, input rst, output reg [3:0] q);
+            always @(posedge clk) if (rst) q <= 4'd0; else q <= q + 4'd1;
+          endmodule
+          EOF
+          cat > tb.v <<'EOF'
+          module tb;
+            reg clk = 0, rst = 1; wire [3:0] q;
+            dut d(.clk(clk), .rst(rst), .q(q));
+            always #5 clk = ~clk;
+            initial begin
+              #12 rst = 0;
+              #40 if (q == 4'd4) $display("PASS"); else $display("FAIL");
+              $finish;
+            end
+          endmodule
+          EOF
+          verilator --lint-only -Wall dut.v
+          # -std=gnu++17 avoids undefined std::string symbols with GCC 16 on UCRT64
+          # TODO: switch to examples/fifo/golden/fifo.v and tb_fifo.v after PR #2 merges
+          verilator --binary --timing -Wall -Wno-fatal -CFLAGS -std=gnu++17 --top-module tb dut.v tb.v
+          ./obj_dir/Vtb | tee out.txt
+          grep -q PASS out.txt
 
       - name: Install package and run tests
         shell: msys2 {0}
