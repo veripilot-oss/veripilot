@@ -38,13 +38,13 @@ bugs:
     fix: Sized literal to 16 bits as 16'h00A5.
   - id: 7
     file: buggy/spi.v
-    line: 141
-    rule: BLKSEQ
+    line: 66
+    rule: BLKANDNBLK
     description: Blocking assignment = used for seq_busy_flag inside sequential posedge clk process.
     fix: Use non-blocking assignment <= for sequential register seq_busy_flag.
   - id: 8
     file: buggy/spi.v
-    line: 146
+    line: 71
     rule: BLKANDNBLK
     description: Variable mixed_assign_reg assigned with both blocking = and non-blocking <= across paths.
     fix: Consistently use non-blocking assignment <= for mixed_assign_reg in sequential blocks.
@@ -68,7 +68,7 @@ bugs:
     fix: Use blocking assignment = for combinational logic assignments.
   - id: 12
     file: buggy/spi.v
-    line: 178
+    line: 10
     rule: SYNCASYNCNET
     description: Signal reset is used as synchronous reset in main logic and asynchronous posedge reset elsewhere.
     fix: Adopt uniform synchronous reset discipline throughout the module.
