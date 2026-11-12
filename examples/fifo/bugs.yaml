@@ -1,0 +1,86 @@
+design: fifo
+bugs:
+  - id: 1
+    file: buggy/fifo.v
+    line: 22
+    rule: UNUSEDSIGNAL
+    description: Input port debug_monitor_pin is declared on the module interface but never used.
+    fix: Remove debug_monitor_pin from the port list or connect it to internal logic.
+  - id: 2
+    file: buggy/fifo.v
+    line: 27
+    rule: UNDRIVEN
+    description: Output port undriven_status_pin is declared on the module interface but never driven.
+    fix: Drive undriven_status_pin with appropriate logic or remove it if not needed.
+  - id: 3
+    file: buggy/fifo.v
+    line: 39
+    rule: UNUSEDSIGNAL
+    description: Internal register lap_counter_reg is declared but never driven nor read.
+    fix: Remove the unused lap_counter_reg declaration.
+  - id: 4
+    file: buggy/fifo.v
+    line: 44
+    rule: UNDRIVEN
+    description: Internal net undriven_parity_bit is declared and read in logic but never driven.
+    fix: Drive undriven_parity_bit with valid logic or remove its usage.
+  - id: 5
+    file: buggy/fifo.v
+    line: 110
+    rule: WIDTHTRUNC
+    description: 5-bit write pointer is assigned to 4-bit trunc_ptr_reg causing upper bit truncation.
+    fix: Match trunc_ptr_reg width to 5 bits or explicitly slice the required lower 4 bits.
+  - id: 6
+    file: buggy/fifo.v
+    line: 115
+    rule: WIDTHEXPAND
+    description: 8-bit constant 8'hA5 is assigned to 16-bit expand_data_reg without explicit width extension.
+    fix: Sized literal to 16 bits as 16'h00A5.
+  - id: 7
+    file: buggy/fifo.v
+    line: 59
+    rule: BLKANDNBLK
+    description: seq_busy_flag is assigned with blocking = inside the posedge block and non-blocking <= elsewhere, mixing both on the same variable.
+    fix: Use non-blocking assignment <= consistently for seq_busy_flag in all sequential blocks.
+  - id: 8
+    file: buggy/fifo.v
+    line: 64
+    rule: BLKANDNBLK
+    description: Variable mixed_assign_reg assigned with both blocking = and non-blocking <= across paths.
+    fix: Consistently use non-blocking assignment <= for mixed_assign_reg in sequential blocks.
+  - id: 9
+    file: buggy/fifo.v
+    line: 157
+    rule: LATCH
+    description: Combinational always block infers latch for inferred_latch_reg because of missing else branch.
+    fix: Provide a complete else branch or default value assignment before conditionals.
+  - id: 10
+    file: buggy/fifo.v
+    line: 165
+    rule: CASEINCOMPLETE
+    description: Case statement on mode_state incompletely covers values with missing pattern and no default.
+    fix: Add default case branch to cover all possible state patterns.
+  - id: 11
+    file: buggy/fifo.v
+    line: 175
+    rule: COMBDLY
+    description: Non-blocking assignment <= used in purely combinational always block.
+    fix: Use blocking assignment = for combinational logic assignments.
+  - id: 12
+    file: buggy/fifo.v
+    line: 11
+    rule: SYNCASYNCNET
+    description: Signal reset is used as synchronous reset in main logic and asynchronous posedge reset elsewhere.
+    fix: Adopt uniform synchronous reset discipline throughout the module.
+  - id: 13
+    file: buggy/fifo.v
+    line: 90
+    rule: PINMISSING
+    description: Submodule instance fifo_parity_checker omits connection to output port parity_err.
+    fix: Explicitly connect parity_err port to a wire or empty port list.
+  - id: 14
+    file: buggy/fifo.v
+    line: 98
+    rule: UNOPTFLAT
+    description: Circular combinational dependency between comb_loop_a and comb_loop_b forms zero-delay loop.
+    fix: Break combinational feedback loop with a clocked register flip-flop.
