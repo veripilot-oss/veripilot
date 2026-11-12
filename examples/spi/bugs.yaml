@@ -1,0 +1,86 @@
+design: spi
+bugs:
+  - id: 1
+    file: buggy/spi.v
+    line: 25
+    rule: UNUSEDSIGNAL
+    description: Input port debug_monitor_pin is declared on the module interface but never used.
+    fix: Remove debug_monitor_pin from the port list or connect it to internal logic.
+  - id: 2
+    file: buggy/spi.v
+    line: 30
+    rule: UNDRIVEN
+    description: Output port undriven_status_pin is declared on the module interface but never driven.
+    fix: Drive undriven_status_pin with appropriate logic or remove it if not needed.
+  - id: 3
+    file: buggy/spi.v
+    line: 46
+    rule: UNUSEDSIGNAL
+    description: Internal register frame_counter_reg is declared but never driven nor read.
+    fix: Remove the unused frame_counter_reg declaration.
+  - id: 4
+    file: buggy/spi.v
+    line: 51
+    rule: UNDRIVEN
+    description: Internal net undriven_parity_bit is declared and read in logic but never driven.
+    fix: Drive undriven_parity_bit with valid logic or remove its usage.
+  - id: 5
+    file: buggy/spi.v
+    line: 122
+    rule: WIDTHTRUNC
+    description: 16-bit div_cnt is assigned to 4-bit trunc_cnt_reg causing upper bit truncation.
+    fix: Match trunc_cnt_reg width to 16 bits or explicitly slice the required lower bits.
+  - id: 6
+    file: buggy/spi.v
+    line: 127
+    rule: WIDTHEXPAND
+    description: 8-bit constant 8'hA5 is assigned to 16-bit expand_data_reg without explicit width extension.
+    fix: Sized literal to 16 bits as 16'h00A5.
+  - id: 7
+    file: buggy/spi.v
+    line: 141
+    rule: BLKSEQ
+    description: Blocking assignment = used for seq_busy_flag inside sequential posedge clk process.
+    fix: Use non-blocking assignment <= for sequential register seq_busy_flag.
+  - id: 8
+    file: buggy/spi.v
+    line: 146
+    rule: BLKANDNBLK
+    description: Variable mixed_assign_reg assigned with both blocking = and non-blocking <= across paths.
+    fix: Consistently use non-blocking assignment <= for mixed_assign_reg in sequential blocks.
+  - id: 9
+    file: buggy/spi.v
+    line: 185
+    rule: LATCH
+    description: Combinational always block infers latch for inferred_latch_reg because of missing else branch.
+    fix: Provide a complete else branch or default value assignment before conditionals.
+  - id: 10
+    file: buggy/spi.v
+    line: 193
+    rule: CASEINCOMPLETE
+    description: Case statement on mode_state incompletely covers values with missing pattern and no default.
+    fix: Add default case branch to cover all possible state patterns.
+  - id: 11
+    file: buggy/spi.v
+    line: 203
+    rule: COMBDLY
+    description: Non-blocking assignment <= used in purely combinational always block.
+    fix: Use blocking assignment = for combinational logic assignments.
+  - id: 12
+    file: buggy/spi.v
+    line: 178
+    rule: SYNCASYNCNET
+    description: Signal reset is used as synchronous reset in main logic and asynchronous posedge reset elsewhere.
+    fix: Adopt uniform synchronous reset discipline throughout the module.
+  - id: 13
+    file: buggy/spi.v
+    line: 97
+    rule: PINMISSING
+    description: Submodule instance spi_parity_checker omits connection to output port parity_err.
+    fix: Explicitly connect parity_err port to a wire or empty port list.
+  - id: 14
+    file: buggy/spi.v
+    line: 105
+    rule: UNOPTFLAT
+    description: Circular combinational dependency between comb_loop_a and comb_loop_b forms zero-delay loop.
+    fix: Break combinational feedback loop with a clocked register flip-flop.
