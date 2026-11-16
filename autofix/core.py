@@ -10,8 +10,11 @@ copy, re-lints, and keeps the change only if CLEARED_RULES are gone and no new r
 up. Rules are applied one after another, so later rules see the earlier fixes. The original
 file is never edited; the fixed design is written to the output directory.
 
-Attempt rows follow docs/results_schema.md (autofix.attempts). `verified` is true only if
-the lint check passed AND the design's testbench prints PASS, so it needs run_tb=True.
+Attempt rows follow docs/results_schema.md (autofix.attempts). By default the testbench is
+run before and after every fix. A fix is `verified` when its warning is gone, no new warning
+appears, the design still builds, and the testbench result is no worse than before that fix
+(NOT BUILDABLE < FAIL/TIMEOUT < PASS). The two results are recorded on the row as the extra
+fields `regression_before` and `regression_after`. A fix that is not verified is not kept.
 """
 
 import argparse
@@ -101,6 +104,33 @@ def run_testbench(design, tb, top, workdir, cwd=None, timeout=60):
     return "PASS" if ok else "FAIL"
 
 
+# Testbench results from worst to best. A fix may not move the result down this scale.
+TB_RANK = {"NOT BUILDABLE": 0, "TIMEOUT": 1, "FAIL": 1, "PASS": 2}
+
+
+def _tb_of(text, name, examples_dir, workdir):
+    """Write text as <name>.v in workdir and return the testbench result for it."""
+    workdir = Path(workdir)
+    workdir.mkdir(parents=True, exist_ok=True)
+    f = workdir / f"{name}.v"
+    f.write_text(text, encoding="utf-8", newline="\n")
+    ex = Path(examples_dir) / name
+    return run_testbench(f, ex / f"tb_{name}.v", f"tb_{name}", workdir, cwd=ex)
+
+
+def _judge(lint_ok, regress, tb_before, tb_after):
+    """Return (verified, note) for one fix. tb_after is None when no testbench was run."""
+    if not lint_ok:
+        return False, "Lint did not clear this warning, or the fix added a new warning; reverted."
+    if not regress:
+        return False, "Lint clean for this warning. Regression was not run."
+    if tb_after == "NOT BUILDABLE":
+        return False, f"Lint clean, but the design does not build after the fix (before: {tb_before}); reverted."
+    if TB_RANK[tb_after] < TB_RANK[tb_before]:
+        return False, f"Lint clean, but the testbench got worse ({tb_before} -> {tb_after}); reverted."
+    return True, f"Lint clean for this warning, design builds, testbench {tb_before} -> {tb_after} (no worse)."
+
+
 def _hunks(old, new, warn_lines):
     """Yield (line, before, after) for each changed region. `line` is the warning it belongs to."""
     a, b = old.split("\n"), new.split("\n")
@@ -121,19 +151,29 @@ def _repo_path(path):
     return normalize_path(p)
 
 
-def fix_design(design_result, examples_dir, out_dir, rules, run_tb=False, require_pass=False):
+def fix_design(design_result, examples_dir, out_dir, rules, regress=True, require_pass=False):
+    """Apply rules to one design. `regress` runs the testbench before and after every fix.
+
+    A fix is kept only if it is verified (see _judge). Without `regress` it is kept when lint
+    is clean, but never marked verified. `require_pass` implies `regress` and also deletes the
+    fixed file unless the final testbench prints PASS.
+    """
+    regress = regress or require_pass
     name = design_result["name"]
     src_path = Path(examples_dir) / name / "buggy" / f"{name}.v"
     text = src_path.read_text(encoding="utf-8")
     dest = Path(out_dir) / name
-    work_cur, work_new = dest / "_cur", dest / "_new"
+    work_cur, work_new, work_tb = dest / "_cur", dest / "_new", dest / "_tb"
     file_field = _repo_path(src_path)
 
     before = {r for r, _ in lint(src_path)}
-    cur_text, cur_rules = text, before
+    cur_text = text
     attempts, fixed_lines = [], set()
+    tb_cur = None
 
     try:
+        if regress:
+            tb_cur = _tb_of(text, name, examples_dir, work_tb)
         for rule in rules:
             findings = lint_text(cur_text, work_cur, name)
             cur_rules = {r for r, _ in findings}
@@ -144,28 +184,36 @@ def fix_design(design_result, examples_dir, out_dir, rules, run_tb=False, requir
             if not fixed or new_text == cur_text:
                 continue
             after = {r for r, _ in lint_text(new_text, work_new, name)}
-            ok = not (after & rule.CLEARED_RULES) and not (after - cur_rules)
+            lint_ok = not (after & rule.CLEARED_RULES) and not (after - cur_rules)
+            tb_new = _tb_of(new_text, name, examples_dir, work_tb) if (regress and lint_ok) else None
+            verified, note = _judge(lint_ok, regress, tb_cur, tb_new)
             rule_name = sorted(rule.RULES)[0]
             for line, b, a in _hunks(cur_text, new_text, lines):
-                attempts.append({
-                    "design": name, "rule": rule_name, "file": file_field, "line": line,
-                    "before": b, "after": a, "verified": False, "_lint_ok": ok,
-                })
-            if ok:
+                row = {"design": name, "rule": rule_name, "file": file_field, "line": line,
+                       "before": b, "after": a, "verified": verified, "note": note}
+                if regress:
+                    row["regression_before"] = tb_cur
+                    if tb_new is not None:
+                        row["regression_after"] = tb_new
+                attempts.append(row)
+            if verified or (lint_ok and not regress):
                 cur_text = new_text
                 fixed_lines.update(fixed)
+                if regress:
+                    tb_cur = tb_new
     finally:
-        shutil.rmtree(work_cur, ignore_errors=True)
-        shutil.rmtree(work_new, ignore_errors=True)
+        for w in (work_cur, work_new, work_tb):
+            shutil.rmtree(w, ignore_errors=True)
 
     result = {"design": name, "fixed_lines": sorted(fixed_lines), "attempts": attempts,
               "rules_before": sorted(before)}
+    if regress:
+        result["testbench"] = tb_cur
     if not attempts:
         result["status"] = "nothing to fix"
         return result
     if cur_text == text:
         result.update(status="reverted", rules_after=sorted(before))
-        _finish_rows(attempts, None)
         return result
 
     dest.mkdir(parents=True, exist_ok=True)
@@ -173,35 +221,12 @@ def fix_design(design_result, examples_dir, out_dir, rules, run_tb=False, requir
     out_file.write_text(cur_text, encoding="utf-8", newline="\n")
     result["rules_after"] = sorted({r for r, _ in lint(out_file)})
 
-    tb_status = None
-    if run_tb or require_pass:
-        tb = Path(examples_dir) / name / f"tb_{name}.v"
-        tb_status = run_testbench(out_file, tb, f"tb_{name}", dest, cwd=Path(examples_dir) / name)
-        result["testbench"] = tb_status
-    _finish_rows(attempts, tb_status)
-
-    if require_pass and tb_status != "PASS":
+    if require_pass and tb_cur != "PASS":
         out_file.unlink()
         result["status"] = "reverted"
     else:
         result["status"] = "kept"
     return result
-
-
-def _finish_rows(attempts, tb_status):
-    """Set `verified` and `note`, and drop internal keys."""
-    for row in attempts:
-        lint_ok = row.pop("_lint_ok")
-        if not lint_ok:
-            row["note"] = "Lint did not clear this warning, or the fix added a new warning; reverted."
-        elif tb_status is None:
-            row["note"] = "Lint clean for this warning. Regression was not run."
-        elif tb_status == "PASS":
-            row["verified"] = True
-            row["note"] = "Lint clean for this warning, regression still passes."
-        else:
-            row["note"] = (f"Lint clean for this warning, but the testbench result is {tb_status} "
-                           "(other planted bugs remain unfixed).")
 
 
 def _now():
@@ -242,10 +267,10 @@ def main(argv=None, rules=None):
     ap.add_argument("--examples", default="examples")
     ap.add_argument("--out", default="results/autofix")
     ap.add_argument("--results", help="also write the autofix section of this results.json")
-    ap.add_argument("--regress", action="store_true",
-                    help="run the testbench on the fixed design and set `verified` from it")
+    ap.add_argument("--no-regress", action="store_true",
+                    help="skip the testbench: fixes are kept on a clean re-lint but never `verified`")
     ap.add_argument("--require-pass", action="store_true",
-                    help="revert the fixed file unless the testbench prints PASS (implies --regress)")
+                    help="strict mode: delete the fixed file unless the final testbench prints PASS")
     args = ap.parse_args(argv)
     rules = rules or all_rules()
 
@@ -256,7 +281,7 @@ def main(argv=None, rules=None):
         names = sorted(p.name for p in Path(args.examples).iterdir()
                        if (p / "buggy" / f"{p.name}.v").exists())
 
-    results = [fix_design({"name": n}, args.examples, args.out, rules, args.regress, args.require_pass)
+    results = [fix_design({"name": n}, args.examples, args.out, rules, not args.no_regress, args.require_pass)
                for n in names]
     for r in results:
         tb = f", testbench {r['testbench']}" if "testbench" in r else ""

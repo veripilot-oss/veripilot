@@ -35,10 +35,10 @@ def fix_source(text, lines_to_fix):
     return "\n".join(src), fixed
 
 
-def fix_design(design_result, examples_dir, out_dir, require_pass=False):
+def fix_design(design_result, examples_dir, out_dir, require_pass=False, regress=True):
     """Apply only this rule to one design (see core.fix_design)."""
     return core.fix_design(design_result, examples_dir, out_dir, [sys.modules[__name__]],
-                           require_pass=require_pass)
+                           regress=regress, require_pass=require_pass)
 
 
 def main(argv=None):

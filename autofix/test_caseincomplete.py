@@ -40,10 +40,32 @@ def test_several_targets_get_a_begin_end_block():
     assert "a = '0;" in new and "b = '0;" in new
 
 
-def test_nonblocking_operator_is_copied():
+def test_clocked_block_gets_an_empty_default_not_zeroing():
     text = "always @(posedge c) begin\n  case (s)\n    1'b0: q <= d;\n  endcase\nend"
+    new, fixed = fix_source(text, [2])
+    assert fixed == [2]
+    lines = new.split("\n")
+    assert lines[3] == "    default: ;"
+    assert lines[4] == "  endcase"
+    assert "'0" not in new
+
+
+def test_clocked_block_with_several_targets_still_gets_one_empty_default():
+    text = (
+        "always @(posedge c) begin\n"
+        "  case (s)\n"
+        "    1'b0: begin a <= 1; b <= 0; end\n"
+        "  endcase\n"
+        "end"
+    )
     new, _ = fix_source(text, [2])
-    assert "default: q <= '0;" in new
+    assert new.count("default: ;") == 1
+    assert "'0" not in new and "begin\n" not in new.split("default")[1]
+
+
+def test_combinational_block_still_zeroes_the_targets():
+    new, _ = fix_source(CASE, [2])
+    assert "default: n = '0;" in new
 
 
 def test_nested_case_uses_the_matching_endcase():
