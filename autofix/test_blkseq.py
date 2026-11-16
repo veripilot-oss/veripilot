@@ -1,10 +1,10 @@
 """Tests for autofix/blkseq.py."""
 
-import shutil
 from pathlib import Path
 
 import pytest
 
+from autofix import core
 from autofix.blkseq import fix_source, normalize_path, fix_design
 
 
@@ -48,7 +48,7 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
 
 
 @pytest.mark.skipif(
-    shutil.which("verilator") is None or not (EXAMPLES / "fifo" / "buggy" / "fifo.v").exists(),
+    not core.have_verilator() or not (EXAMPLES / "fifo" / "buggy" / "fifo.v").exists(),
     reason="needs verilator and the fifo example",
 )
 def test_fifo_blkseq_is_fixed(tmp_path):
