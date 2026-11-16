@@ -77,7 +77,7 @@
   },
   "health": {
     "generated_at": "2026-11-17T10:05:00Z",
-    "score": 78.4,
-    "components": { "lint": 70.0, "regression": 66.7, "coverage": 90.3, "autofix": 50.0 }
+    "score": 76.6,
+    "components": { "regression": 66.7, "coverage": 83.8, "lint": 96.0, "autofix": 50.0 }
   }
 }
