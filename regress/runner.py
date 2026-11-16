@@ -71,8 +71,9 @@ def build(design: str, root: Path, mdir: Path) -> Path:
 
 
 def classify(returncode: int, output: str) -> str:
-    """'pass' only on a clean exit, a PASS line and no FAIL line."""
-    if returncode == 0 and re.search(r"^PASS\b", output, re.M) and "FAIL" not in output:
+    """'pass' only on a clean exit, a PASS line and no line starting with FAIL."""
+    if (returncode == 0 and re.search(r"^PASS\b", output, re.M)
+            and not re.search(r"^\s*FAIL\b", output, re.M)):
         return "pass"
     return "fail"
 
@@ -100,7 +101,11 @@ def _now() -> str:
 
 
 def write_section(out_path: Path, tests: list[dict], version: str) -> dict:
-    """Replace only the `regression` section, keeping everything else."""
+    """Update only the `regression` section, keeping everything else.
+
+    Rows are merged by (design, test, seed): a new row replaces an old row with
+    the same key, other rows stay. So running fifo, then spi, keeps both.
+    """
     doc = {}
     if out_path.exists():
         doc = json.loads(out_path.read_text(encoding="utf-8"))
@@ -108,7 +113,10 @@ def write_section(out_path: Path, tests: list[dict], version: str) -> dict:
     doc.setdefault("schema_version", 1)
     doc.setdefault("run", {"id": now.replace(":", "-") + "-local",
                            "started_at": now, "verilator_version": version})
-    doc["regression"] = {"generated_at": now, "tests": tests}
+    old = doc.get("regression", {}).get("tests", [])
+    merged = {(t["design"], t["test"], t["seed"]): t for t in old}
+    merged.update({(t["design"], t["test"], t["seed"]): t for t in tests})
+    doc["regression"] = {"generated_at": now, "tests": list(merged.values())}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = out_path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
@@ -135,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
     try:
         tests = run(args.design, args.seeds, args.out)
-    except (RuntimeError, FileNotFoundError) as e:
+    except (RuntimeError, FileNotFoundError, OSError, subprocess.CalledProcessError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
     for t in tests:

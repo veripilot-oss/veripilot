@@ -18,7 +18,8 @@ def test_classify():
     assert runner.classify(0, "PASS\n") == "pass"
     assert runner.classify(0, "") == "fail"                       # no PASS line
     assert runner.classify(1, "PASS\n") == "fail"                 # bad exit
-    assert runner.classify(0, "FAIL: x\nPASS\n") == "fail"        # FAIL seen
+    assert runner.classify(0, "FAIL: x\nPASS\n") == "fail"        # FAIL line seen
+    assert runner.classify(0, "PASS\nno FAILURE here, FAIL mid-line\n") == "pass"
 
 
 def test_write_section_keeps_other_sections(tmp_path):
@@ -36,6 +37,24 @@ def test_write_section_keeps_other_sections(tmp_path):
     assert validate(doc) == []
 
 
+def test_write_section_merges_designs(tmp_path):
+    out = tmp_path / "results.json"
+    row = lambda d, seed, st: {"design": d, "test": f"tb_{d}", "status": st, "seed": seed, "duration_s": 0.1}
+    runner.write_section(out, [row("fifo", 1, "pass")], "5.034")
+    runner.write_section(out, [row("spi", 1, "pass"), row("fifo", 1, "fail")], "5.034")
+    tests = json.loads(out.read_text())["regression"]["tests"]
+    assert {(t["design"], t["seed"]): t["status"] for t in tests} == {
+        ("fifo", 1): "fail", ("spi", 1): "pass"}
+
+
+def test_main_reports_broken_verilator(monkeypatch, capsys):
+    def boom():
+        raise subprocess.CalledProcessError(1, "verilator")
+    monkeypatch.setattr(runner, "verilator_version", boom)
+    assert runner.main(["fifo"]) == 2
+    assert "error" in capsys.readouterr().err
+
+
 def test_write_section_creates_valid_file(tmp_path):
     out = tmp_path / "sub" / "results.json"
     runner.write_section(out, [], "5.034")
@@ -43,9 +62,10 @@ def test_write_section_creates_valid_file(tmp_path):
 
 
 def _verilator_ok():
-    if not shutil.which("verilator"):
+    try:
+        return runner.verilator_version() == runner.REQUIRED_VERILATOR
+    except (OSError, RuntimeError, subprocess.CalledProcessError):
         return False
-    return runner.verilator_version() == runner.REQUIRED_VERILATOR
 
 
 @pytest.mark.skipif(not _verilator_ok(), reason="Verilator 5.034 not available")

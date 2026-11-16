@@ -10,3 +10,4 @@ coverage_advisor/reports/
 .DS_Store
 *.aux
 *.out
+results/
