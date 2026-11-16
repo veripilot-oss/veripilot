@@ -53,3 +53,13 @@ def test_triage_flaky_testbench(tmp_path):
 
     doc = json.loads(out_file.read_text())
     assert not validate(doc)
+
+
+def test_write_triage_section_corrupt_file_raises(tmp_path):
+    import pytest
+    out_file = tmp_path / "results.json"
+    out_file.write_text("{ this is corrupt json", encoding="utf-8")
+
+    labels = [{"design": "fifo", "test": "tb_fifo", "label": "repeatable", "runs": 5, "failures": 5}]
+    with pytest.raises(RuntimeError, match="Cannot update corrupt"):
+        write_triage_section(out_file, labels, "5.034")

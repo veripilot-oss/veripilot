@@ -148,8 +148,8 @@ def write_triage_section(out_path: Path, new_labels: list[dict], version: str) -
     if out_path.exists():
         try:
             doc = json.loads(out_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            doc = {}
+        except json.JSONDecodeError as err:
+            raise RuntimeError(f"Cannot update corrupt {out_path}: {err}") from err
     now = _now()
     doc.setdefault("schema_version", 1)
     doc.setdefault(
