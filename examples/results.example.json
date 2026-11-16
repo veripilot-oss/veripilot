@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "2026-11-17T10-00-00Z-local",
+    "started_at": "2026-11-17T10:00:00Z",
+    "verilator_version": "5.034",
+    "git_sha": "32ae9c5"
+  },
+  "lint": {
+    "generated_at": "2026-11-17T10:00:05Z",
+    "warnings": [
+      {
+        "design": "fifo",
+        "rule": "UNUSEDSIGNAL",
+        "file": "examples/fifo/buggy/fifo.v",
+        "line": 39,
+        "severity": "warning",
+        "message": "Signal is not driven, nor used: 'lap_counter_reg'",
+        "matched_bug_id": 3
+      },
+      {
+        "design": "fifo",
+        "rule": "WIDTHTRUNC",
+        "file": "examples/fifo/buggy/fifo.v",
+        "line": 110,
+        "severity": "warning",
+        "message": "Operator ASSIGN expects 4 bits on the Assign RHS, but Assign RHS's VARREF 'wr_ptr' generates 5 bits.",
+        "matched_bug_id": 5
+      }
+    ]
+  },
+  "autofix": {
+    "generated_at": "2026-11-17T10:01:00Z",
+    "attempts": [
+      {
+        "design": "fifo",
+        "rule": "UNUSEDSIGNAL",
+        "file": "examples/fifo/buggy/fifo.v",
+        "line": 39,
+        "before": "reg [3:0] lap_counter_reg;",
+        "after": "",
+        "verified": true,
+        "note": "Lint clean for this warning, regression still passes."
+      },
+      {
+        "design": "fifo",
+        "rule": "WIDTHTRUNC",
+        "file": "examples/fifo/buggy/fifo.v",
+        "line": 110,
+        "before": "trunc_ptr_reg <= wr_ptr;",
+        "after": "trunc_ptr_reg <= wr_ptr[3:0];",
+        "verified": false,
+        "note": "Warning gone, but tb_fifo failed afterwards."
+      }
+    ]
+  },
+  "regression": {
+    "generated_at": "2026-11-17T10:02:00Z",
+    "tests": [
+      { "design": "fifo", "test": "tb_fifo", "status": "pass", "seed": 1, "duration_s": 0.84 },
+      { "design": "fifo", "test": "tb_fifo", "status": "fail", "seed": 7, "duration_s": 0.91 },
+      { "design": "spi", "test": "tb_spi", "status": "pass", "seed": 1, "duration_s": 0.52 }
+    ]
+  },
+  "coverage": {
+    "generated_at": "2026-11-17T10:03:00Z",
+    "designs": [
+      { "design": "fifo", "line_percent": 92.5, "toggle_percent": 71.0 },
+      { "design": "spi", "line_percent": 88.0, "toggle_percent": null }
+    ]
+  },
+  "triage": {
+    "generated_at": "2026-11-17T10:04:00Z",
+    "labels": [
+      { "design": "fifo", "test": "tb_fifo", "label": "flaky", "runs": 10, "failures": 3 }
+    ]
+  },
+  "health": {
+    "generated_at": "2026-11-17T10:05:00Z",
+    "score": 78.4,
+    "components": { "lint": 70.0, "regression": 66.7, "coverage": 90.3, "autofix": 50.0 }
+  }
+}
