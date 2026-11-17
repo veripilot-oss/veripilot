@@ -9,6 +9,7 @@ import json
 import yaml
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -178,9 +179,78 @@ def run_all_lint(examples_dir="examples", output_path="results/lint.json"):
     return out
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _now():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _repo_relative(examples_dir, design, file):
+    """Repo-relative path with forward slashes, e.g. examples/fifo/buggy/fifo.v."""
+    path = Path(examples_dir).resolve() / design / file
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return f"examples/{design}/{file}"
+
+
+def build_lint_section(lint_data, examples_dir="examples"):
+    """Turn the run_all_lint() result into the `lint` section of docs/results_schema.md."""
+    warnings = []
+    for design in lint_data["designs"]:
+        for f in design["findings"]:
+            warnings.append({
+                "design": design["name"],
+                "rule": f["rule"],
+                "file": _repo_relative(examples_dir, design["name"], f["file"]),
+                "line": f["line"],
+                "severity": f["severity"],
+                "message": f["message"],
+                "matched_bug_id": f["matched_bug_id"],
+            })
+    return {"generated_at": _now(), "warnings": warnings}
+
+
+def write_lint_section(results_path, lint_data, examples_dir="examples"):
+    """Replace only the `lint` section of results.json and keep every other section.
+
+    A missing file is created. A corrupt file raises RuntimeError and is left untouched.
+    """
+    path = Path(results_path)
+    doc = {}
+    if path.exists():
+        try:
+            doc = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as err:
+            raise RuntimeError(f"Cannot update corrupt {path}: {err}") from err
+    now = _now()
+    doc.setdefault("schema_version", 1)
+    doc.setdefault("run", {
+        "id": now.replace(":", "-") + "-local",
+        "started_at": now,
+        "verilator_version": lint_data["verilator_version"],
+    })
+    doc["lint"] = build_lint_section(lint_data, examples_dir)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(path)
+    return doc
+
+
 if __name__ == "__main__":
+    # usage: python lint/linter.py [examples_dir] [lint.json] [results.json]
     ex_dir = sys.argv[1] if len(sys.argv) > 1 else "examples"
     out_file = sys.argv[2] if len(sys.argv) > 2 else "results/lint.json"
+    results_file = sys.argv[3] if len(sys.argv) > 3 else str(Path(out_file).parent / "results.json")
     data = run_all_lint(ex_dir, out_file)
     print(f"Lint complete: {data['totals']['detected']}/{data['totals']['planted']} planted bugs detected across {len(data['designs'])} design(s).")
     print(f"Results saved to {out_file}")
+    try:
+        write_lint_section(results_file, data, ex_dir)
+    except RuntimeError as err:
+        print(f"error: {err}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Updated lint section in {results_file}")
