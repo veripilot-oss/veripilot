@@ -166,7 +166,13 @@ def write_triage_section(out_path: Path, new_labels: list[dict], version: str) -
     for item in existing_labels:
         merged_map[(item.get("design"), item.get("test"))] = item
     for item in new_labels:
-        merged_map[(item.get("design"), item.get("test"))] = item
+        key = (item.get("design"), item.get("test"))
+        if item.get("label") == "pass":
+            # The schema lists failing tests only (flaky or repeatable). A test that now
+            # passes is not written, and a stale entry from an earlier failure is removed.
+            merged_map.pop(key, None)
+        else:
+            merged_map[key] = item
 
     doc["triage"] = {
         "generated_at": now,

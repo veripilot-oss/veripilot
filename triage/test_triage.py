@@ -63,3 +63,22 @@ def test_write_triage_section_corrupt_file_raises(tmp_path):
     labels = [{"design": "fifo", "test": "tb_fifo", "label": "repeatable", "runs": 5, "failures": 5}]
     with pytest.raises(RuntimeError, match="Cannot update corrupt"):
         write_triage_section(out_file, labels, "5.034")
+
+
+def test_passing_test_is_not_written(tmp_path):
+    out_file = tmp_path / "results.json"
+    labels = [{"design": "fifo", "test": "tb_fifo", "label": "pass", "runs": 3, "failures": 0}]
+    doc = write_triage_section(out_file, labels, "5.034")
+    assert doc["triage"]["labels"] == []
+    assert not validate(doc)
+
+
+def test_passing_test_removes_its_stale_failure(tmp_path):
+    out_file = tmp_path / "results.json"
+    failing = {"design": "fifo", "test": "tb_fifo", "label": "repeatable", "runs": 3, "failures": 3}
+    other = {"design": "spi", "test": "tb_spi", "label": "flaky", "runs": 3, "failures": 1}
+    write_triage_section(out_file, [failing, other], "5.034")
+    fixed = dict(failing, label="pass", failures=0)
+    doc = write_triage_section(out_file, [fixed], "5.034")
+    assert [l["design"] for l in doc["triage"]["labels"]] == ["spi"]
+    assert not validate(doc)
