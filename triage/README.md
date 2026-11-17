@@ -89,6 +89,14 @@ $ python -m triage.runner fifo --test tb_fifo_flaky --seeds 1 2 3 4 5
 updated triage section in results/results.json
 ```
 
+A repeatable failure. `tb_fifo_repeatable` is a deliberately failing testbench for the demo: it expects the FIFO to still be empty after one write, which is wrong, so it fails on every seed:
+
+```
+$ python -m triage.runner fifo --test tb_fifo_repeatable --seeds 1 2 3 4 5
+[fifo:tb_fifo_repeatable] label=repeatable (5/5 failures across seeds [1, 2, 3, 4, 5])
+updated triage section in results/results.json
+```
+
 A passing test. Nothing is written to `labels`:
 
 ```
@@ -112,4 +120,4 @@ error: Verilator build failed for spi (tb_spi, variant=buggy):
 - [x] Automated multi-seed rerun engine (`triage.runner`, #25).
 - [x] Classifier and `results/results.json` writer (#25).
 - [x] A passing test is not written to the results (#31).
-- [ ] A `repeatable` demo. No example in `examples/` builds and then fails on every seed (the buggy variants do not build), so there is no real `repeatable` output to show. Adding a small always-failing testbench, like `tb_fifo_flaky`, would fix that.
+- [x] A `repeatable` demo: `examples/fifo/tb_fifo_repeatable.v` fails on every seed.
