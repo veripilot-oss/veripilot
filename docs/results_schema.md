@@ -59,16 +59,17 @@ One file, `results/results.json`, carries the output of every VeriPilot stage. T
 | `line` | integer | Line of the original warning. |
 | `before` | string | Original code. |
 | `after` | string | Proposed code. |
-| `verified` | boolean | `true` only if the targeted warning is gone, no new warning appears, the design builds, **and** the testbench result is no worse than before that fix (see below). |
+| `verified` | boolean | `true` only if the targeted warning is gone, no new warning appears, the design builds, **and** the testbench ends in `PASS` after the fix. |
 | `note` | string | Optional. Why it was or was not verified. |
 | `regression_before` | string | Optional. Testbench result before this fix: `PASS`, `FAIL`, `TIMEOUT` or `NOT BUILDABLE`. |
 | `regression_after` | string | Optional. Same values, after this fix. Absent when lint already rejected the fix, so no testbench was run. |
 
-`verified` compares the testbench result before and after each fix on this scale, worst to best:
-`NOT BUILDABLE` < `FAIL` = `TIMEOUT` < `PASS`. A fix is verified when `regression_after` is not
-below `regression_before` and is not `NOT BUILDABLE`. The planted-bug examples do not pass their
-testbench until every planted bug is fixed, so a verified fix does **not** mean the testbench passes.
-Strict mode (`--require-pass`) additionally requires the final testbench to print `PASS`.
+A fix that is lint clean and whose testbench result is no worse than before
+(`NOT BUILDABLE` < `FAIL` = `TIMEOUT` < `PASS`) is kept so later fixes can build on it, but it is
+`verified: false` until `regression_after` is `PASS`. A fix that makes the result worse is
+reverted. The planted-bug examples do not pass their testbench until every planted bug is fixed,
+so `verified` is `false` for their rows. Strict mode (`--require-pass`) additionally deletes the
+fixed file unless the final testbench prints `PASS`.
 
 ### `regression`
 

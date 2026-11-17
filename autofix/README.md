@@ -2,7 +2,7 @@
 
 Deterministic fixes for Verilator lint warnings in `examples/*/buggy`. Each fix is applied
 to a copy, re-linted, and the testbench is run before and after it. A fix is kept only if it
-is verified. The original files are never edited.
+is lint clean and no worse. The original files are never edited.
 
 ## Rules
 
@@ -18,21 +18,23 @@ Rules run in that order, and later rules see the earlier fixes.
 
 ## What `verified` means
 
-A fix is `verified` when all of these hold:
+A fix is `verified` only when all of these hold:
 
 1. the targeted warning is gone,
 2. no new warning appears,
 3. the design builds with its testbench, and
-4. the testbench result is **no worse than before that fix**
-   (`NOT BUILDABLE` < `FAIL` = `TIMEOUT` < `PASS`).
+4. the testbench ends in `PASS`.
 
-A fix that is not verified is not kept. Each row records `regression_before` and
-`regression_after` (see `docs/results_schema.md`).
+A fix that is lint clean and builds, and whose testbench is no worse than before
+(`NOT BUILDABLE` < `FAIL` = `TIMEOUT` < `PASS`), is **kept** so later fixes can build on it,
+but it is not verified until the testbench passes. A fix that makes the testbench worse, or
+breaks the build, is reverted. Each row records `regression_before` and `regression_after`
+(see `docs/results_schema.md`).
 
-The planted-bug examples feed every planted-bug signal into their `empty` output, so their
-testbenches do not print PASS until every planted bug is fixed. Verified therefore means
-"did not make things worse", not "the testbench passes". For example, BLKSEQ turns the buggy
-FIFO from `NOT BUILDABLE` into `FAIL`, which is an improvement.
+The planted-bug examples do not print PASS until every planted bug is fixed, and autofix covers
+only some of them. On the buggy examples, `verified` is therefore `false` for every row. The
+`note` says what happened, for example BLKSEQ turns the buggy FIFO from `NOT BUILDABLE` into
+`FAIL`: kept as progress, not verified.
 
 ## Run
 
