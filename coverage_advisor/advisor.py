@@ -9,6 +9,7 @@ standardized JSON reports.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -224,10 +225,61 @@ def run_design_coverage(design_name: str, root_dir: Path) -> dict[str, Any]:
     }
 
 
+def update_results_json(coverage_summary: dict[str, Any], results_path: Path) -> None:
+    """Update or create results/results.json with the coverage section according to results_schema.md.
+    
+    Adheres to the writers' rules:
+    - Writes only its own section ('coverage') and leaves other sections untouched.
+    - If the file exists but is corrupt / not valid JSON / not a dict, raises RuntimeError.
+    - Generates UTC ISO 8601 timestamp ending in 'Z'.
+    - Formats coverage designs as flat list with 'design', 'line_percent', and 'toggle_percent'.
+    """
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if results_path.exists():
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except Exception as e:
+            raise RuntimeError(f"Cannot update corrupt {results_path}: {e}")
+        if not isinstance(doc, dict):
+            raise RuntimeError(f"Cannot update corrupt {results_path}: expected JSON object at top level")
+    else:
+        doc = {}
+
+    if "schema_version" not in doc:
+        doc["schema_version"] = 1
+
+    if "run" not in doc:
+        doc["run"] = {
+            "id": f"{now_iso}-local",
+            "started_at": now_iso,
+            "verilator_version": "5.034"
+        }
+
+    designs_list = []
+    for d_name, rep in sorted(coverage_summary.items()):
+        designs_list.append({
+            "design": d_name,
+            "line_percent": rep.get("covered_percent", 0.0),
+            "toggle_percent": None
+        })
+
+    doc["coverage"] = {
+        "generated_at": now_iso,
+        "designs": designs_list
+    }
+
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="VeriPilot Coverage Advisor")
     parser.add_argument("designs", nargs="*", default=["fifo", "spi", "timer"], help="Design names to evaluate")
     parser.add_argument("--out-dir", default="coverage_advisor/reports", help="Output directory for JSON reports")
+    parser.add_argument("--results-json", default="results/results.json", help="Path to unified results.json")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parent.parent
@@ -248,6 +300,16 @@ def main() -> int:
         except Exception as e:
             had_error = True
             print(f"[-] Error evaluating {d}: {e}")
+
+    # Emit to unified results.json if we gathered coverage for at least one design
+    if summary:
+        results_file = root / args.results_json
+        try:
+            update_results_json(summary, results_file)
+            print(f"[+] Updated coverage section in {results_file}")
+        except RuntimeError as e:
+            print(f"[-] Error writing {results_file}: {e}")
+            return 2
 
     return 1 if had_error else 0
 
