@@ -20,13 +20,14 @@ fields `regression_before` and `regression_after`. A fix that is not verified is
 import argparse
 import difflib
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+from regress import runner as _regress
 
 DIAG = re.compile(
     r"%(?:Warning|Error)-(?P<rule>[A-Z0-9_]+):\s*(?P<file>.+?):(?P<line>\d+)(?::\d+)?:"
@@ -38,27 +39,15 @@ def normalize_path(p):
 
 
 def verilator_cmd():
-    """Command prefix for verilator. On Windows 'verilator' is a perl script."""
-    exe = shutil.which("verilator")
-    if exe is None and os.name == "nt":
-        # the extensionless perl script is invisible to which() on Windows
-        for d in os.environ.get("PATH", "").split(os.pathsep):
-            candidate = Path(d.strip('"')) / "verilator"
-            if candidate.is_file():
-                exe = str(candidate)
-                break
-    if exe is None:
-        raise RuntimeError("verilator not found on PATH")
-    if os.name == "nt" and not exe.lower().endswith((".exe", ".bat", ".cmd")):
-        return ["perl", exe]
-    return [exe]
+    """Command prefix for verilator. Shared with the regress runner (handles the Windows perl script)."""
+    return _regress._tool_cmd("verilator")
 
 
 def have_verilator():
     try:
-        verilator_cmd()
+        _regress.verilator_version()
         return True
-    except RuntimeError:
+    except (OSError, RuntimeError, subprocess.CalledProcessError):
         return False
 
 
