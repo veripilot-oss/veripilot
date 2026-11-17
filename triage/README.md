@@ -75,5 +75,5 @@ Triage records its classification under the `triage` section of `results/results
 ## Status & Roadmap
 
 - [x] Documentation & architecture specification (*this document*).
-- [ ] *(Planned - #14)* Automated multi-seed test rerun engine.
-- [ ] *(Planned - #14)* Results classifier and `results/results.json` writer.
+- [x] Automated multi-seed test rerun engine (`triage.runner`).
+- [x] Results classifier and `results/results.json` writer.
