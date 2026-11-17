@@ -118,3 +118,25 @@ jobs:
           else
             echo "No pyproject.toml yet, skipping Python tests"
           fi
+
+      - name: Run coverage advisor (fifo, spi, timer)
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          python coverage_advisor/advisor.py fifo spi timer
+
+      - name: Validate generated results.json
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          python -c "
+          import json, sys
+          from tests.test_results_schema import validate
+          with open('results/results.json', 'r', encoding='utf-8') as f:
+              doc = json.load(f)
+          errs = validate(doc)
+          if errs:
+              print('Validation errors in results/results.json:', errs, file=sys.stderr)
+              sys.exit(1)
+          print('results/results.json is valid')
+          "
