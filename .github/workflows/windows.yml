@@ -136,8 +136,9 @@ jobs:
         shell: msys2 {0}
         run: |
           export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
-          echo "==> Running triage on flaky demo"
+          echo "==> Running triage on the flaky and repeatable demos"
           PYTHONPATH=. python -m triage.runner fifo --test tb_fifo_flaky --seeds 1 2 3 4 5
+          PYTHONPATH=. python -m triage.runner fifo --test tb_fifo_repeatable --seeds 1 2 3 4 5
 
       - name: Run linter on buggy examples
         shell: msys2 {0}
