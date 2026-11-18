@@ -108,13 +108,73 @@ jobs:
           ./obj_dir/Vtb | tee out.txt
           grep -q PASS out.txt
 
-      - name: Install package and run tests
+      - name: Install Python test dependencies
         shell: msys2 {0}
         run: |
-          export PATH=/opt/verilator/bin:$PATH
-          if [ -f pyproject.toml ]; then
-            python -m pip install -e ".[dev]" || python -m pip install -e .
-            python -m pytest
-          else
-            echo "No pyproject.toml yet, skipping Python tests"
-          fi
+          # the UCRT64 python has no pip; use the MSYS2 packages
+          pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-python-pytest mingw-w64-ucrt-x86_64-python-yaml
+
+      - name: Lint golden examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          for rtl in examples/*/golden/*.v; do
+            echo "==> Linting golden design: $rtl"
+            verilator --lint-only -Wall "$rtl"
+          done
+
+      - name: Run regression runner on golden examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          for design in fifo spi timer; do
+            echo "==> Running regression on $design"
+            PYTHONPATH=. python -m regress.runner "$design" --seeds 1 2
+          done
+
+      - name: Run triage runner on flaky and failing examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          echo "==> Running triage on flaky demo"
+          PYTHONPATH=. python -m triage.runner fifo --test tb_fifo_flaky --seeds 1 2 3 4 5
+
+      - name: Run linter on buggy examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          PYTHONPATH=. python lint/linter.py examples results/lint.json
+
+      - name: Run autofix on buggy examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          PYTHONPATH=. python -m autofix --examples examples --results results/results.json
+
+      - name: Run coverage advisor on examples
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          PYTHONPATH=. python coverage_advisor/advisor.py fifo spi timer
+
+      - name: Validate generated results.json schema
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          PYTHONPATH=. python -c "
+          import json, sys
+          from tests.test_results_schema import validate
+          with open('results/results.json', 'r', encoding='utf-8') as f:
+              doc = json.load(f)
+          errs = validate(doc)
+          if errs:
+              print('Validation errors in results/results.json:', errs, file=sys.stderr)
+              sys.exit(1)
+          print('results/results.json is valid')
+          "
+
+      - name: Run Python unit tests
+        shell: msys2 {0}
+        run: |
+          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
+          PYTHONPATH=. python -m pytest
