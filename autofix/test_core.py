@@ -48,23 +48,25 @@ def test_write_section_creates_a_new_file(tmp_path, monkeypatch):
     assert doc["schema_version"] == 1 and doc["autofix"]["attempts"] == []
 
 
-def test_judge_verified_needs_lint_build_and_no_worse_testbench():
+def test_judge_verified_only_when_the_testbench_passes():
     j = core._judge
-    assert j(True, True, "NOT BUILDABLE", "FAIL")[0] is True      # now builds: better
-    assert j(True, True, "FAIL", "FAIL")[0] is True               # no worse
-    assert j(True, True, "FAIL", "PASS")[0] is True
-    assert j(True, True, "PASS", "PASS")[0] is True
-    assert j(True, True, "PASS", "FAIL")[0] is False              # got worse
-    assert j(True, True, "FAIL", "NOT BUILDABLE")[0] is False     # broke the build
-    assert j(True, True, "NOT BUILDABLE", "NOT BUILDABLE")[0] is False
-    assert j(False, True, "FAIL", None)[0] is False               # lint did not clear
-    verified, note = j(True, False, None, None)                   # --no-regress
-    assert verified is False and "not run" in note
+    # (verified, keep)
+    assert j(True, True, "NOT BUILDABLE", "FAIL")[:2] == (False, True)    # now builds: progress, kept
+    assert j(True, True, "FAIL", "FAIL")[:2] == (False, True)             # no worse, but not PASS
+    assert j(True, True, "FAIL", "PASS")[:2] == (True, True)
+    assert j(True, True, "NOT BUILDABLE", "PASS")[:2] == (True, True)
+    assert j(True, True, "PASS", "PASS")[:2] == (True, True)
+    assert j(True, True, "PASS", "FAIL")[:2] == (False, False)            # got worse
+    assert j(True, True, "FAIL", "NOT BUILDABLE")[:2] == (False, False)   # broke the build
+    assert j(True, True, "NOT BUILDABLE", "NOT BUILDABLE")[:2] == (False, False)
+    assert j(False, True, "FAIL", None)[:2] == (False, False)             # lint did not clear
+    verified, keep, note = j(True, False, None, None)                     # --no-regress
+    assert (verified, keep) == (False, True) and "not run" in note
 
 
 def test_judge_timeout_and_fail_rank_equal():
-    assert core._judge(True, True, "FAIL", "TIMEOUT")[0] is True
-    assert core._judge(True, True, "TIMEOUT", "FAIL")[0] is True
+    assert core._judge(True, True, "FAIL", "TIMEOUT")[:2] == (False, True)
+    assert core._judge(True, True, "TIMEOUT", "FAIL")[:2] == (False, True)
 
 
 # --- engine with a stubbed testbench and a stubbed linter (no Verilator needed) ---------------
@@ -114,14 +116,26 @@ def _stub(monkeypatch, tb_results, lint_clears=True):
     return seq
 
 
-def test_verified_row_records_before_and_after(tmp_path, monkeypatch):
+def test_fix_that_reaches_pass_is_verified(tmp_path, monkeypatch):
     ex = _make_example(tmp_path)
-    _stub(monkeypatch, ["NOT BUILDABLE", "FAIL"])               # baseline, after the fix
+    _stub(monkeypatch, ["NOT BUILDABLE", "PASS"])               # baseline, after the fix
     res = core.fix_design({"name": "d"}, ex, tmp_path / "out", [_Rule])
     row = res["attempts"][0]
     assert row["verified"] is True
     assert row["regression_before"] == "NOT BUILDABLE"
-    assert row["regression_after"] == "FAIL"
+    assert row["regression_after"] == "PASS"
+    assert res["status"] == "kept" and res["testbench"] == "PASS"
+    assert "GOOD" in (tmp_path / "out" / "d" / "d.v").read_text()
+
+
+def test_fix_that_leaves_the_testbench_failing_is_kept_but_not_verified(tmp_path, monkeypatch):
+    ex = _make_example(tmp_path)
+    _stub(monkeypatch, ["FAIL", "FAIL"])
+    res = core.fix_design({"name": "d"}, ex, tmp_path / "out", [_Rule])
+    row = res["attempts"][0]
+    assert row["verified"] is False
+    assert row["regression_before"] == "FAIL" and row["regression_after"] == "FAIL"
+    assert "not verified" in row["note"]
     assert res["status"] == "kept" and res["testbench"] == "FAIL"
     assert "GOOD" in (tmp_path / "out" / "d" / "d.v").read_text()
 
@@ -169,8 +183,8 @@ def test_require_pass_is_strict(tmp_path, monkeypatch):
     ex = _make_example(tmp_path)
     _stub(monkeypatch, ["NOT BUILDABLE", "FAIL"])
     res = core.fix_design({"name": "d"}, ex, tmp_path / "out", [_Rule], require_pass=True)
-    assert res["attempts"][0]["verified"] is True               # per-fix rule is unchanged
-    assert res["status"] == "reverted"                          # but the final result is not PASS
+    assert res["attempts"][0]["verified"] is False
+    assert res["status"] == "reverted"                          # the final result is not PASS
     assert not (tmp_path / "out" / "d" / "d.v").exists()
 
 
@@ -219,7 +233,7 @@ def test_real_designs_with_regression(design, tmp_path):
     for a in res["attempts"]:
         assert a["regression_before"] in core.TB_RANK
         assert a["regression_after"] in core.TB_RANK
-        assert a["verified"] is True
+        assert a["verified"] is (a["regression_after"] == "PASS")
         assert core.TB_RANK[a["regression_after"]] >= core.TB_RANK[a["regression_before"]]
     # BLKSEQ is what lets the buggy design build at all
     first = next(a for a in res["attempts"] if a["rule"] == "BLKSEQ")
