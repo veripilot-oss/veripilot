@@ -49,8 +49,9 @@ export PYTHONPATH=.
 # 1. regression on each design (creates results/results.json)
 for d in fifo spi timer; do python3 -m regress.runner $d --seeds 1 2 3; done
 
-# 2. triage the deliberately flaky demo test
+# 2. triage the two demo tests: one flaky, one that fails every time
 python3 -m triage.runner fifo --test tb_fifo_flaky --seeds 1 2 3 4 5
+python3 -m triage.runner fifo --test tb_fifo_repeatable --seeds 1 2 3 4 5
 
 # 3. lint the buggy examples
 python3 lint/linter.py examples results/lint.json
@@ -86,7 +87,7 @@ Run the tests with `python3 -m pytest` (about two minutes).
 1. **The problem.** Open `examples/fifo/buggy/fifo.v`. It has planted bugs and nothing fails when you read it.
 2. **Lint.** Run step 3. Say: "42 of 42 planted bugs found, with no testbench."
 3. **Autofix.** Run step 4. Open the dashboard and expand `fifo` to show the before and after of a fix.
-4. **Flaky test.** Run step 2. In the dashboard, point at the seed strip for `tb_fifo_flaky`: mixed ticks and crosses mean flaky, a solid row of crosses would mean a real bug.
+4. **Flaky versus real.** Run step 2. In the dashboard, the triage column for `fifo` now reads "1 flaky, 1 repeatable": `tb_fifo_flaky` fails on some seeds (flaky, depends on the seed) and `tb_fifo_repeatable` fails on all of them (repeatable, a real bug to fix).
 5. **Score.** Run steps 5 and 6, reload, and read the verdict and health score.
 6. **Honest close.** "Lint needs no tests. Everything else needs good tests. Coverage shows where yours are weak."
 

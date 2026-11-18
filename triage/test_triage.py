@@ -82,3 +82,23 @@ def test_passing_test_removes_its_stale_failure(tmp_path):
     doc = write_triage_section(out_file, [fixed], "5.034")
     assert [l["design"] for l in doc["triage"]["labels"]] == ["spi"]
     assert not validate(doc)
+
+
+def test_triage_repeatable_testbench(tmp_path):
+    out_file = tmp_path / "results.json"
+    res = triage_test(
+        design="fifo",
+        test_name="tb_fifo_repeatable",
+        variant="golden",
+        seeds=[1, 2, 3, 4, 5],
+        out_path=out_file,
+    )
+
+    assert res["test"] == "tb_fifo_repeatable"
+    assert res["label"] == "repeatable"
+    assert res["runs"] == 5
+    assert res["failures"] == 5
+
+    doc = json.loads(out_file.read_text())
+    assert doc["triage"]["labels"] == [res]
+    assert not validate(doc)
