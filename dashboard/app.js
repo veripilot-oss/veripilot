@@ -234,6 +234,17 @@ function detailPanel(doc, d) {
       ? simpleTable(["Test", "Seed", "Status", "Seconds"], r.map((x) => [el("code", { text: x.test }), x.seed, x.status, x.duration_s]))
       : el("p", { cls: "empty", text: "No runs for this design." }));
   }
+  if (doc.triage) {
+    const t = byDesign(rows(doc, "triage", "labels"), d);
+    block("Triage", t.length
+      ? simpleTable(["Test", "Label", "Failed runs", "Meaning"], t.map((x) => [
+          el("code", { text: x.test }),
+          el("span", { cls: "tag " + x.label, text: x.label }),
+          x.runs == null ? "" : `${x.failures == null ? "?" : x.failures} of ${x.runs}`,
+          x.label === "flaky" ? "Fails on some seeds only: depends on the seed." : "Fails on every seed: a real bug to fix.",
+        ]))
+      : el("p", { cls: "empty", text: "No failing tests were labelled for this design." }));
+  }
   return panel;
 }
 
