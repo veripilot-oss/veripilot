@@ -108,16 +108,11 @@ jobs:
           ./obj_dir/Vtb | tee out.txt
           grep -q PASS out.txt
 
-      - name: Install dependencies
+      - name: Install Python test dependencies
         shell: msys2 {0}
         run: |
-          export PATH=/ucrt64/bin:/opt/verilator/bin:$PATH
-          python -m pip install --upgrade pip
-          if [ -f pyproject.toml ]; then
-            python -m pip install -e ".[dev]" || python -m pip install -e .
-          else
-            python -m pip install pytest pyyaml
-          fi
+          # the UCRT64 python has no pip; use the MSYS2 packages
+          pacman -S --needed --noconfirm mingw-w64-ucrt-x86_64-python-pytest mingw-w64-ucrt-x86_64-python-yaml
 
       - name: Lint golden examples
         shell: msys2 {0}
