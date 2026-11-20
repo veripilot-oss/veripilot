@@ -11,8 +11,10 @@ is lint clean and no worse. The original files are never edited.
 | `BLKSEQ` (clears `BLKANDNBLK`) | `=` becomes `<=` on the flagged line in a clocked block |
 | `COMBDLY` | `<=` becomes `=` on the flagged line in a combinational block |
 | `CASEINCOMPLETE` | adds a `default` before the matching `endcase`: `default: ;` in a clocked block (registers hold their value), `default: <var> = '0;` in a combinational block |
+| `WIDTHEXPAND` | widens narrow sized literals to the target width, e.g. `8'hA5` becomes `16'h00A5` |
+| `WIDTHTRUNC` | slices a wider plain identifier RHS to the target width, e.g. `write[3:0]` |
 
-Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`) with `RULES`,
+Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `widthexpand.py`, `widthtrunc.py`) with `RULES`,
 `CLEARED_RULES` and a pure `fix_source(text, lines)`. The shared loop is in `core.py`.
 Rules run in that order, and later rules see the earlier fixes.
 
