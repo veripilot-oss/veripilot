@@ -74,8 +74,9 @@ jobs:
 
       - name: Run triage runner on flaky and failing examples
         run: |
-          echo "==> Running triage on flaky demo"
+          echo "==> Running triage on the flaky and repeatable demos"
           PYTHONPATH=. python3 -m triage.runner fifo --test tb_fifo_flaky --seeds 1 2 3 4 5
+          PYTHONPATH=. python3 -m triage.runner fifo --test tb_fifo_repeatable --seeds 1 2 3 4 5
 
       - name: Run linter on buggy examples
         run: |

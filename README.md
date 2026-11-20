@@ -79,7 +79,7 @@ Run the tests with `python3 -m pytest` (about two minutes).
 ## Known limits
 
 - Lint runs only on the `buggy/` examples, which have 63 warnings by design, so the lint part of the health score is 0. That is expected.
-- Autofix marks a fix `verified` when the testbench is *no worse than before*. On a buggy design whose testbench already fails, a fix can be verified while the testbench still fails. See the `note` on each attempt.
+- Autofix marks a fix `verified` only when the testbench ends in PASS. The buggy examples never reach PASS (autofix covers only 6 of the 42 planted bugs), so every attempt shows "not verified" and the autofix part of the health score is 0. Fixes that build and are no worse are kept as progress. See the `note` on each attempt.
 - Verilator must be 5.034. Results from another version are not accepted.
 
 ## Demo script (about 3 minutes)
