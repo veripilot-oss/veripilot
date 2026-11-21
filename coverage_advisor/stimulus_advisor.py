@@ -1,13 +1,15 @@
-"""Rule-Based Stimulus Synthesis tool for VeriPilot coverage advisor.
+"""Rule-Based Stimulus Synthesis Scaffolding for VeriPilot coverage advisor.
 
 Analyzes uncovered statements and branches from coverage_advisor reports
 and synthesizes targeted Verilog test stimulus to exercise uncovered lines.
 
-Note on AI / LLM Extension:
-The `generate_targeted_stimulus` function currently uses deterministic,
-rule-based patterns for common RTL corner cases. This function serves as the
-plug-in boundary where an LLM agent or model can be connected in the future
-to draft novel testbench stimulus.
+Architecture & Extension Note:
+The `generate_targeted_stimulus` function analyzes uncovered source context
+using deterministic heuristic rules. It serves as the plug-in interface where
+an external LLM model or agent can be attached to generate novel stimulus.
+In current designs (such as SPI and Timer), defensive `default` case branches
+in 2-bit FSMs represent unreachable ceilings (83.33% and 95.83%) when all
+valid states are already exercised.
 """
 
 from __future__ import annotations
@@ -18,9 +20,15 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List
+
+# Ensure repository root is on sys.path so the module runs without PYTHONPATH=.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from coverage_advisor.advisor import run_design_coverage
 
@@ -39,38 +47,55 @@ def extract_uncovered_context(uncovered_list: list[dict[str, Any]]) -> str:
 
 
 def generate_targeted_stimulus(design_name: str, uncovered_items: list[dict[str, Any]]) -> str:
-    """Synthesize testbench stimulus sequences targeting known uncovered corner cases.
+    """Synthesize testbench stimulus sequences targeting uncovered RTL context.
 
-    Future extension: This rule-based function is where an external LLM
-    prompt/synthesis module will plug in.
+    Analyzes uncovered source context dynamically rather than relying on fixed
+    line numbers. Serves as the extension point where an external LLM
+    can be plugged in.
     """
+    if not uncovered_items:
+        return ""
+
+    context = extract_uncovered_context(uncovered_items)
     stimulus_blocks: list[str] = []
 
+    # Heuristic 1: Uncovered case/default state transitions
+    has_default_or_state = bool(
+        re.search(r"\bdefault\b", context, re.IGNORECASE)
+        or re.search(r"\bstate\b", context, re.IGNORECASE)
+        or re.search(r"\bcase\b", context, re.IGNORECASE)
+    )
+
+    # Heuristic 2: Uncovered counter or timer boundary conditions
+    has_counter_or_timer = bool(
+        re.search(r"\bcounter\b", context, re.IGNORECASE)
+        or re.search(r"\bcount\b", context, re.IGNORECASE)
+        or re.search(r"\btimer\b", context, re.IGNORECASE)
+    )
+
+    # Heuristic 3: Uncovered FIFO full/empty boundaries
+    has_fifo_boundary = bool(
+        re.search(r"\bfull\b", context, re.IGNORECASE)
+        or re.search(r"\bempty\b", context, re.IGNORECASE)
+        or re.search(r"\bwr_ptr\b|\brd_ptr\b", context, re.IGNORECASE)
+    )
+
     if design_name == "spi":
-        # Check if default/idle transitions or corner conditions are uncovered
-        has_default_or_idle = any(
-            item.get("line") in (88, 89) or "default" in item.get("code", "")
-            for item in uncovered_items
-        )
-        if has_default_or_idle:
+        if has_default_or_state:
             stimulus_blocks.append("""
-    // [Rule-Based Stimulus] Exercise idle transitions and corner values
+    // [Stimulus Synthesis] Exercise SPI state machine transitions and corner values
     @(negedge clk);
     start = 1'b0;
     repeat (2) @(posedge clk);
     do_xfer(8'h00, 8'h00);
     do_xfer(8'hFF, 8'hFF);
+    repeat (2) @(posedge clk);
 """)
 
     elif design_name == "timer":
-        # Check if default state or zero-count edge conditions are uncovered
-        has_default = any(
-            item.get("line") in (51, 52) or "default" in item.get("code", "")
-            for item in uncovered_items
-        )
-        if has_default:
+        if has_counter_or_timer or has_default_or_state:
             stimulus_blocks.append("""
-    // [Rule-Based Stimulus] Exercise zero-count edge condition
+    // [Stimulus Synthesis] Exercise timer zero-count and boundary edge conditions
     drive(1, 16'd0);
     repeat (3) @(negedge clk);
     drive(0, 16'd0);
@@ -78,9 +103,25 @@ def generate_targeted_stimulus(design_name: str, uncovered_items: list[dict[str,
 """)
 
     elif design_name == "fifo":
-        # Boundary cases: full write attempt and empty read attempt
-        stimulus_blocks.append("""
-    // [Rule-Based Stimulus] Exercise FIFO boundary limits
+        if has_fifo_boundary or has_default_or_state:
+            stimulus_blocks.append("""
+    // [Stimulus Synthesis] Exercise FIFO boundary limits (overflow and underflow attempts)
+    repeat (2) @(negedge clk);
+    // Write until full + 1 extra write attempt
+    repeat (18) begin
+        @(negedge clk);
+        wr_en = 1'b1;
+        din = $urandom_range(0, 255);
+    end
+    @(negedge clk);
+    wr_en = 1'b0;
+    // Read until empty + 1 extra read attempt
+    repeat (18) begin
+        @(negedge clk);
+        rd_en = 1'b1;
+    end
+    @(negedge clk);
+    rd_en = 1'b0;
     repeat (2) @(posedge clk);
 """)
 
@@ -103,7 +144,7 @@ def patch_testbench_content(original_content: str, stimulus_code: str) -> str:
 
 def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str, Any]:
     """Evaluate synthesized stimulus in an isolated temporary sandbox.
-    
+
     IMPORTANT: Never modifies any files under examples/ in the committed repository.
     All builds, patches, and simulations run inside a temporary copy.
     """
@@ -129,7 +170,7 @@ def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str,
             "uncovered_count": len(uncovered)
         }
 
-    # 2. Synthesize stimulus
+    # 2. Synthesize stimulus from uncovered context
     stimulus = generate_targeted_stimulus(design_name, uncovered)
     if not stimulus.strip():
         return {
@@ -189,10 +230,52 @@ def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str,
             }
 
 
+def update_results_json(stimulus_summary: dict[str, Any], results_path: Path) -> None:
+    """Update or create results/results.json with the stimulus section.
+
+    Adheres to the shared results_schema.md writer rules:
+    - Writes only its own section ('stimulus') and leaves other sections untouched.
+    - If the file exists but is corrupt / not valid JSON / not a dict, raises RuntimeError.
+    - Generates UTC ISO 8601 timestamp ending in 'Z'.
+    """
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if results_path.exists():
+        try:
+            with open(results_path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+        except Exception as e:
+            raise RuntimeError(f"Cannot update corrupt {results_path}: {e}")
+        if not isinstance(doc, dict):
+            raise RuntimeError(f"Cannot update corrupt {results_path}: expected JSON object at top level")
+    else:
+        doc = {}
+
+    if "schema_version" not in doc:
+        doc["schema_version"] = 1
+
+    if "run" not in doc:
+        doc["run"] = {
+            "id": f"{now_iso}-local",
+            "started_at": now_iso,
+            "verilator_version": "5.034"
+        }
+
+    doc["stimulus"] = {
+        "generated_at": now_iso,
+        "designs": stimulus_summary.get("designs", [])
+    }
+
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2)
+
+
 def run_all_stimulus_synthesis(
     designs: list[str],
     repo_root: Path,
-    out_file: Path | None = None
+    out_file: Path | None = None,
+    results_path: Path | None = None
 ) -> dict[str, Any]:
     """Run stimulus synthesis across designs and output summary results."""
     now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -225,6 +308,9 @@ def run_all_stimulus_synthesis(
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=2)
 
+    if results_path:
+        update_results_json(report, results_path)
+
     return report
 
 
@@ -236,14 +322,19 @@ def main() -> int:
         default="coverage_advisor/reports/stimulus_report.json",
         help="Path to output JSON report"
     )
+    parser.add_argument(
+        "--results-json",
+        default="results/results.json",
+        help="Path to unified results.json file"
+    )
     args = parser.parse_args()
 
-    root = Path(__file__).resolve().parent.parent
-    out_path = root / args.out_file
-    run_all_stimulus_synthesis(args.designs, root, out_path)
+    root = REPO_ROOT
+    out_path = root / args.out_file if args.out_file else None
+    results_path = root / args.results_json if args.results_json else None
+    run_all_stimulus_synthesis(args.designs, root, out_path, results_path)
     return 0
 
 
 if __name__ == "__main__":
-    import sys
     sys.exit(main())
