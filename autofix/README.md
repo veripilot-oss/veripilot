@@ -11,8 +11,9 @@ is lint clean and no worse. The original files are never edited.
 | `BLKSEQ` (clears `BLKANDNBLK`) | `=` becomes `<=` on the flagged line in a clocked block |
 | `COMBDLY` | `<=` becomes `=` on the flagged line in a combinational block |
 | `CASEINCOMPLETE` | adds a `default` before the matching `endcase`: `default: ;` in a clocked block (registers hold their value), `default: <var> = '0;` in a combinational block |
+| `LATCH` | adds `<signal> = '0;` as the first statement of the `always @(*) begin` block; skipped if the block assigns several signals, uses a select, or already has a default |
 
-Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`) with `RULES`,
+Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `latch.py`) with `RULES`,
 `CLEARED_RULES` and a pure `fix_source(text, lines)`. The shared loop is in `core.py`.
 Rules run in that order, and later rules see the earlier fixes.
 

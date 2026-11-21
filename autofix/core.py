@@ -255,8 +255,8 @@ def _verilator_version():
 
 
 def all_rules():
-    from autofix import blkseq, caseincomplete, combdly
-    return [blkseq, combdly, caseincomplete]
+    from autofix import blkseq, caseincomplete, combdly, latch
+    return [blkseq, combdly, caseincomplete, latch]
 
 
 def main(argv=None, rules=None):
