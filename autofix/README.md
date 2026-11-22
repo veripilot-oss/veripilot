@@ -13,8 +13,10 @@ is lint clean and no worse. The original files are never edited.
 | `CASEINCOMPLETE` | adds a `default` before the matching `endcase`: `default: ;` in a clocked block (registers hold their value), `default: <var> = '0;` in a combinational block |
 | `WIDTHEXPAND` | widens narrow sized literals to the target width, e.g. `8'hA5` becomes `16'h00A5` |
 | `WIDTHTRUNC` | slices a wider plain identifier RHS to the target width, e.g. `write[3:0]` |
+| `UNUSEDSIGNAL` | deletes an unused one-name internal `reg`/`wire`/`logic` declaration; ports and partly used signals are skipped |
+| `UNDRIVEN` | ties an undriven internal `wire` to zero (`wire x = 1'b0;`) or adds `assign x = 1'b0;` for an `output wire`; `reg` and `output reg` are skipped |
 
-Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `widthexpand.py`, `widthtrunc.py`) with `RULES`,
+Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `widthexpand.py`, `widthtrunc.py`, `undriven.py`, `unusedsignal.py`) with `RULES`,
 `CLEARED_RULES` and a pure `fix_source(text, lines)`. The shared loop is in `core.py`.
 Rules run in that order, and later rules see the earlier fixes.
 
