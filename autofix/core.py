@@ -265,7 +265,6 @@ def _verilator_version():
 
 
 def all_rules():
-def all_rules():
     from autofix import blkseq, caseincomplete, combdly, latch, widthexpand, widthtrunc, undriven, unusedsignal, syncasyncnet
     return [blkseq, combdly, caseincomplete, latch, widthexpand, widthtrunc, undriven, unusedsignal, syncasyncnet]
 
