@@ -20,9 +20,16 @@ _BLOCKED_TOKENS = (
     "$fopen",
     "$fwrite",
     "$fdisplay",
+    "$fscanf",
+    "$fgets",
     "$readmem",
-    "`include",
+    "$dumpfile",
+    "$finish",
+    "$stop",
     "$value$plusargs",
+    "$test$plusargs",
+    "`include",
+    'import "DPI-C"',
 )
 _MAX_LINES = 200
 
@@ -51,20 +58,30 @@ def _is_safe(snippet: str) -> bool:
     return True
 
 
-def _build_prompt(design_name: str, context: str, golden_src: str) -> str:
+def _build_prompt(
+    design_name: str, context: str, golden_src: str, tb_src: str = ""
+) -> str:
+    tb_section = (
+        f"\nExisting testbench ({design_name}):\n{tb_src}\n"
+        if tb_src
+        else ""
+    )
     return (
         f"You are a Verilog testbench engineer.\n"
         f"Design: {design_name}\n\n"
         f"The following RTL lines are NOT yet covered by the existing testbench:\n"
         f"{context}\n\n"
         f"Golden RTL source ({design_name}.v):\n"
-        f"{golden_src}\n\n"
-        "Return ONLY a Verilog stimulus snippet (no markdown fences, no explanation) "
-        "that exercises the uncovered lines above. "
-        "Use only synthesisable Verilog constructs: clocked @(posedge/negedge clk) blocks, "
-        "signal assignments, repeat/begin/end. "
-        "Do NOT use $system, $fopen, $fwrite, $fdisplay to files, $readmem, `include, "
-        "or $value$plusargs. Keep the snippet under 200 lines."
+        f"{golden_src}\n"
+        f"{tb_section}\n"
+        "Return ONLY Verilog stimulus statements (no markdown fences, no explanation, "
+        "and no module or initial wrapper) that will be inserted directly into the "
+        "existing testbench before the final check to exercise the uncovered lines above. "
+        "Use the existing testbench signal names and helper tasks if present, with "
+        "clocked @(posedge/negedge clk) blocks, signal assignments, and repeat/begin/end. "
+        "Do NOT use $system, $fopen, $fwrite, $fdisplay, $fscanf, $fgets, $readmem, "
+        "$dumpfile, $finish, $stop, $value$plusargs, $test$plusargs, `include, or "
+        'import "DPI-C". Keep the snippet under 200 lines.'
     )
 
 
@@ -120,7 +137,15 @@ def generate(design_name: str, uncovered_items: list[dict[str, Any]]) -> str | N
     except OSError:
         return None
 
-    prompt = _build_prompt(design_name, context, golden_src)
+    tb_path = golden_path.parent.parent / f"tb_{design_name}.v"
+    tb_src = ""
+    if tb_path.exists():
+        try:
+            tb_src = tb_path.read_text(encoding="utf-8")
+        except OSError:
+            tb_src = ""
+
+    prompt = _build_prompt(design_name, context, golden_src, tb_src)
 
     # Call the LLM client.
     try:

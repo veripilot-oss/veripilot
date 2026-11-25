@@ -66,9 +66,17 @@ def generate_targeted_stimulus(design_name: str, uncovered_items: list[dict[str,
         llm_result = _llm_stim.generate(design_name, uncovered_items)
         if llm_result is not None:
             return llm_result
-    except ImportError:
+    except Exception:
         pass
     # ------------------------------------------------------------------------
+
+    return _generate_rule_based_stimulus(design_name, uncovered_items)
+
+
+def _generate_rule_based_stimulus(design_name: str, uncovered_items: list[dict[str, Any]]) -> str:
+    """Deterministic rule-based stimulus fallback."""
+    if not uncovered_items:
+        return ""
 
     context = extract_uncovered_context(uncovered_items)
     stimulus_blocks: list[str] = []
@@ -186,7 +194,14 @@ def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str,
 
     # 2. Synthesize stimulus from uncovered context
     stimulus = generate_targeted_stimulus(design_name, uncovered)
-    if not stimulus.strip():
+    rule_stimulus = _generate_rule_based_stimulus(design_name, uncovered)
+    candidates = []
+    if stimulus.strip():
+        candidates.append(stimulus)
+    if rule_stimulus.strip() and rule_stimulus != stimulus:
+        candidates.append(rule_stimulus)
+
+    if not candidates:
         return {
             "design": design_name,
             "baseline_percent": base_cov,
@@ -197,35 +212,36 @@ def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str,
         }
 
     # 3. Create isolated sandbox to evaluate patched testbench
-    with tempfile.TemporaryDirectory() as tmpdir:
-        sandbox_root = Path(tmpdir)
-        sandbox_examples = sandbox_root / "examples" / design_name
-        sandbox_golden = sandbox_examples / "golden"
-        sandbox_golden.mkdir(parents=True, exist_ok=True)
+    last_result: dict[str, Any] | None = None
+    for candidate in candidates:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sandbox_root = Path(tmpdir)
+            sandbox_examples = sandbox_root / "examples" / design_name
+            sandbox_golden = sandbox_examples / "golden"
+            sandbox_golden.mkdir(parents=True, exist_ok=True)
 
-        # Copy design and testbench to sandbox
-        shutil.copy2(golden_rtl, sandbox_golden / f"{design_name}.v")
-        orig_tb = tb_file.read_text(encoding="utf-8")
-        patched_tb = patch_testbench_content(orig_tb, stimulus)
-        (sandbox_examples / f"tb_{design_name}.v").write_text(patched_tb, encoding="utf-8")
+            # Copy design and testbench to sandbox
+            shutil.copy2(golden_rtl, sandbox_golden / f"{design_name}.v")
+            orig_tb = tb_file.read_text(encoding="utf-8")
+            patched_tb = patch_testbench_content(orig_tb, candidate)
+            (sandbox_examples / f"tb_{design_name}.v").write_text(patched_tb, encoding="utf-8")
 
-        # 4. Measure coverage on sandbox copy
-        try:
-            patched_rep = run_design_coverage(design_name, sandbox_root)
-            new_cov = patched_rep.get("covered_percent", 0.0)
-            new_uncovered = patched_rep.get("uncovered", [])
+            # 4. Measure coverage on sandbox copy
+            try:
+                patched_rep = run_design_coverage(design_name, sandbox_root)
+                new_cov = patched_rep.get("covered_percent", 0.0)
+                new_uncovered = patched_rep.get("uncovered", [])
 
-            if new_cov > base_cov:
-                return {
-                    "design": design_name,
-                    "baseline_percent": base_cov,
-                    "final_percent": new_cov,
-                    "status": "improved",
-                    "improved": True,
-                    "uncovered_count": len(new_uncovered)
-                }
-            else:
-                return {
+                if new_cov > base_cov:
+                    return {
+                        "design": design_name,
+                        "baseline_percent": base_cov,
+                        "final_percent": new_cov,
+                        "status": "improved",
+                        "improved": True,
+                        "uncovered_count": len(new_uncovered)
+                    }
+                last_result = {
                     "design": design_name,
                     "baseline_percent": base_cov,
                     "final_percent": base_cov,
@@ -233,15 +249,18 @@ def evaluate_stimulus_in_sandbox(design_name: str, repo_root: Path) -> dict[str,
                     "improved": False,
                     "uncovered_count": len(uncovered)
                 }
-        except Exception as e:
-            return {
-                "design": design_name,
-                "baseline_percent": base_cov,
-                "final_percent": base_cov,
-                "status": f"failed: {e}",
-                "improved": False,
-                "uncovered_count": len(uncovered)
-            }
+            except Exception as e:
+                last_result = {
+                    "design": design_name,
+                    "baseline_percent": base_cov,
+                    "final_percent": base_cov,
+                    "status": f"failed: {e}",
+                    "improved": False,
+                    "uncovered_count": len(uncovered)
+                }
+
+    assert last_result is not None
+    return last_result
 
 
 def update_results_json(stimulus_summary: dict[str, Any], results_path: Path) -> None:
