@@ -11,9 +11,14 @@ is lint clean and no worse. The original files are never edited.
 | `BLKSEQ` (clears `BLKANDNBLK`) | `=` becomes `<=` on the flagged line in a clocked block |
 | `COMBDLY` | `<=` becomes `=` on the flagged line in a combinational block |
 | `CASEINCOMPLETE` | adds a `default` before the matching `endcase`: `default: ;` in a clocked block (registers hold their value), `default: <var> = '0;` in a combinational block |
-| `PINMISSING` | appends the missing named connection to the instance's last connection line: `/* verilator lint_off PINCONNECTEMPTY */ .<port>() /* verilator lint_on PINCONNECTEMPTY */` for an output, a sized zero `.<port>(N'b0)` for an input; port directions come from the submodule in the same file; inouts, unknown or duplicate modules, and positional or `.*` instances are skipped |
+| `LATCH` | adds `<signal> = '0;` as the first statement of the `always @(*) begin` block; skipped if the block assigns several signals, uses a select, or already has a default |
+| `WIDTHEXPAND` | widens narrow sized literals to the target width, e.g. `8'hA5` becomes `16'h00A5` |
+| `WIDTHTRUNC` | slices a wider plain identifier RHS to the target width, e.g. `write[3:0]` |
+| `UNUSEDSIGNAL` | deletes an unused one-name internal `reg`/`wire`/`logic` declaration; ports and partly used signals are skipped |
+| `UNDRIVEN` | ties an undriven internal `wire` to zero (`wire x = 1'b0;`) or adds `assign x = 1'b0;` for an `output wire`; `reg` and `output reg` are skipped |
+| `PINMISSING` | missing **output** port only: adds an explicit empty connection `/* verilator lint_off PINCONNECTEMPTY */ .<port>() /* verilator lint_on PINCONNECTEMPTY */` on the instance's last connection line. This silences the warning; it does not prove the output was meant to be unused, so review it. Missing **input** ports are never tied to zero (that would hide a real bug, such as a forgotten enable), so those instances are skipped, as are inouts, modules not declared in the same file, and positional or `.*` instances |
 
-Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `pinmissing.py`) with `RULES`,
+Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `latch.py`, `widthexpand.py`, `widthtrunc.py`, `undriven.py`, `unusedsignal.py`, `pinmissing.py`) with `RULES`,
 `CLEARED_RULES` and a pure `fix_source(text, lines)`. The shared loop is in `core.py`.
 Rules run in that order, and later rules see the earlier fixes.
 
