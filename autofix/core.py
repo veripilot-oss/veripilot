@@ -3,6 +3,8 @@
 A rule is a module with:
     RULES          set of Verilator rule names it fixes
     CLEARED_RULES  set of rule names that must be gone after the fix
+    PARTIAL        optional, True if some warnings of the rule can't be fixed; then the fix
+                   must remove one warning per fixed line instead of the whole rule name
     fix_source(text, lines) -> (new_text, fixed_lines)   (lines are 1-based)
 
 For each rule, in order, the engine lints the current text, fixes the flagged lines on a
@@ -182,8 +184,16 @@ def fix_design(design_result, examples_dir, out_dir, rules, regress=True, requir
             new_text, fixed = rule.fix_source(cur_text, lines)
             if not fixed or new_text == cur_text:
                 continue
-            after = {r for r, _ in lint_text(new_text, work_new, name)}
-            lint_ok = not (after & rule.CLEARED_RULES) and not (after - cur_rules)
+            after_findings = lint_text(new_text, work_new, name)
+            after = {r for r, _ in after_findings}
+            if getattr(rule, "PARTIAL", False):
+                # The rule cannot fix every warning of its kind (e.g. ports), so the rule name
+                # may stay. Require that each fixed line removed one of its warnings instead.
+                n_before = sum(1 for r, _ in findings if r in rule.CLEARED_RULES)
+                n_after = sum(1 for r, _ in after_findings if r in rule.CLEARED_RULES)
+                lint_ok = n_after <= n_before - len(fixed) and not (after - cur_rules)
+            else:
+                lint_ok = not (after & rule.CLEARED_RULES) and not (after - cur_rules)
             tb_new = _tb_of(new_text, name, examples_dir, work_tb) if (regress and lint_ok) else None
             verified, keep, note = _judge(lint_ok, regress, tb_cur, tb_new)
             rule_name = sorted(rule.RULES)[0]
@@ -255,8 +265,8 @@ def _verilator_version():
 
 
 def all_rules():
-    from autofix import blkseq, caseincomplete, combdly, latch
-    return [blkseq, combdly, caseincomplete, latch]
+    from autofix import blkseq, caseincomplete, combdly, latch, undriven, unusedsignal, widthexpand, widthtrunc
+    return [blkseq, combdly, caseincomplete, latch, widthexpand, widthtrunc, undriven, unusedsignal]
 
 
 def main(argv=None, rules=None):
