@@ -25,8 +25,9 @@ is lint clean and no worse. The original source tree is never modified on disk.
 | `UNUSEDSIGNAL` | deletes an unused one-name internal `reg`/`wire`/`logic` declaration; ports and partly used signals are skipped |
 | `UNDRIVEN` | ties an undriven internal `wire` to zero (`wire x = 1'b0;`) or adds `assign x = 1'b0;` for an `output wire`; `reg` and `output reg` are skipped |
 | `SYNCASYNCNET` | changes asynchronous sensitivity lists on the named reset net to uniform synchronous `always @(posedge clk)` |
+| `PINMISSING` | missing **output** port only: adds an explicit empty connection `/* verilator lint_off PINCONNECTEMPTY */ .<port>() /* verilator lint_on PINCONNECTEMPTY */` on the instance's last connection line. This silences the warning; it does not prove the output was meant to be unused, so review it. Missing **input** ports are never tied to zero (that would hide a real bug, such as a forgotten enable), so those instances are skipped, as are inouts, modules not declared in the same file, and positional or `.*` instances |
 
-Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `latch.py`, `widthexpand.py`, `widthtrunc.py`, `undriven.py`, `unusedsignal.py`, `syncasyncnet.py`) with `RULES`,
+Each rule is one module (`blkseq.py`, `combdly.py`, `caseincomplete.py`, `latch.py`, `widthexpand.py`, `widthtrunc.py`, `undriven.py`, `unusedsignal.py`, `syncasyncnet.py`, `pinmissing.py`) with `RULES`,
 `CLEARED_RULES` and a pure `fix_source(text, lines)`. The shared loop is in `core.py`.
 Rules run in that order, and later rules see the earlier fixes.
 
