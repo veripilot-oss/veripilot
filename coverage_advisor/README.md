@@ -43,7 +43,7 @@ python -m unittest coverage_advisor/test_stimulus_advisor.py
 `coverage_advisor/stimulus_advisor.py` analyzes the uncovered branches and lines reported by `advisor.py` and synthesizes targeted stimulus to reach those cases.
 
 ### Key Architecture & Principles
-- **Scaffolding & Extension Interface**: Implements deterministic rule-based heuristics for common RTL corner cases (state machine default branches, counter boundaries, FIFO depth limits). Serves as the plug-in interface where an LLM agent will connect in future work.
+- **Scaffolding & Extension Interface**: Implements deterministic rule-based heuristics for common RTL corner cases (state machine default branches, counter boundaries, FIFO depth limits). Serves as the plug-in interface where `llm_stimulus.py` connects to an optional LLM. When `VERIPILOT_LLM_API_KEY` (or a local `VERIPILOT_LLM_BASE_URL`) is configured, the golden RTL and testbench are sent to the configured endpoint to draft stimulus; otherwise, or if the LLM output is unsafe or fails to improve coverage, it falls back to the rule-based path.
 - **Dynamic Context Parsing**: Uncovered lines are analyzed dynamically via `extract_uncovered_context()` rather than matching hardcoded line numbers.
 - **Non-Destructive Sandbox**: All patched testbenches and simulations execute inside an isolated `tempfile.TemporaryDirectory()`. Committed files under `examples/` are **never** modified.
 - **Coverage Improvement Evaluation & Ceilings**:
