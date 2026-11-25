@@ -52,9 +52,23 @@ def generate_targeted_stimulus(design_name: str, uncovered_items: list[dict[str,
     Analyzes uncovered source context dynamically rather than relying on fixed
     line numbers. Serves as the extension point where an external LLM
     can be plugged in.
+
+    When coverage_advisor.llm_stimulus is available (i.e. llm_client has been
+    installed), it is tried first.  On any failure the function falls back to
+    the deterministic rule-based heuristics below.
     """
     if not uncovered_items:
         return ""
+
+    # --- LLM path (optional, falls back gracefully) -------------------------
+    try:
+        from coverage_advisor import llm_stimulus as _llm_stim  # type: ignore[import]
+        llm_result = _llm_stim.generate(design_name, uncovered_items)
+        if llm_result is not None:
+            return llm_result
+    except ImportError:
+        pass
+    # ------------------------------------------------------------------------
 
     context = extract_uncovered_context(uncovered_items)
     stimulus_blocks: list[str] = []
