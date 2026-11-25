@@ -24,7 +24,8 @@ endmodule"""
     assert len(new.split("\n")) == len(src.split("\n"))
 
 
-def test_scalar_input_gets_1bit_zero():
+def test_no_fire_on_missing_scalar_input():
+    # a forgotten input (an enable, say) must not be tied off: that would hide the bug
     src = """module child(input wire enable, input wire [7:0] din);
 endmodule
 
@@ -33,12 +34,10 @@ module top;
         .din(8'h55)
     );
 endmodule"""
-    new, fixed = fix_source(src, [5])
-    assert fixed == [6]
-    assert "        .din(8'h55), .enable(1'b0)" in new
+    assert fix_source(src, [5]) == (src, [])
 
 
-def test_vector_input_gets_sized_zero():
+def test_no_fire_on_missing_vector_input():
     src = """module child(input wire [3:0] mask, output wire ready);
 endmodule
 
@@ -48,24 +47,34 @@ module top;
         .ready(r)
     );
 endmodule"""
-    new, fixed = fix_source(src, [6])
-    assert fixed == [7]
-    assert ".ready(r), .mask(4'b0)" in new
+    assert fix_source(src, [6]) == (src, [])
 
 
-def test_parameter_width_input_gets_fill_zero():
+def test_no_fire_when_input_and_output_both_missing():
+    # all-or-nothing: the output is not added if an input is missing too
+    src = """module child(input wire en, output wire q);
+endmodule
+
+module top;
+    child u_c (
+    );
+endmodule"""
+    assert fix_source(src, [5]) == (src, [])
+
+
+def test_output_with_parameterized_module():
     src = """module child #(parameter W = 8) (input wire [W-1:0] d, output wire q);
 endmodule
 
 module top;
-    wire q;
+    wire [3:0] x;
     child #(.W(4)) u_c (
-        .q(q)
+        .d(x)
     );
 endmodule"""
     new, fixed = fix_source(src, [6])
     assert fixed == [7]
-    assert ".q(q), .d('0)" in new
+    assert ".d(x), " + WAIVED.format("q") in new
 
 
 def test_close_paren_on_same_line_as_last_connection():

@@ -1,13 +1,14 @@
 """Autofix rule for PINMISSING: a submodule instance omits a port connection.
 
-Adds the missing named connection(s) to the instance:
-- output port: `/* verilator lint_off PINCONNECTEMPTY */ .<port>() /* verilator lint_on PINCONNECTEMPTY */`
-  (left unconnected on purpose, without raising PINCONNECTEMPTY)
-- input port: a sized zero, `.<port>(1'b0)` / `.<port>(16'b0)` (`'0` when the width is a parameter)
+Only missing OUTPUT ports are handled. Each one gets an explicit empty connection:
+`/* verilator lint_off PINCONNECTEMPTY */ .<port>() /* verilator lint_on PINCONNECTEMPTY */`.
+This states that the output is left unconnected on purpose. It silences the warning; it does
+not prove the output was meant to be unused, so a reviewer should still check it.
 
-Port directions come from the submodule's ANSI port list in the same file. The instance is
-skipped when the module is not found (or is defined twice), when a missing port is an inout or
-has no direction, or when the instance uses positional or `.*` connections.
+Missing INPUT ports are never tied off: tying a forgotten input (an enable, say) to zero would
+hide a real bug behind a clean lint. The instance is skipped when any missing port is an input
+or inout, when the module is not found in the same file (or is defined twice), or when the
+instance uses positional or `.*` connections.
 
 The new text is appended to the last connection line, so the line count never changes and
 only that line is returned as fixed.
@@ -48,15 +49,6 @@ def _parse_modules(code):
             ports[p.group(3)] = (p.group(1), p.group(2).strip() if p.group(2) else None)
         modules[name] = ports or None
     return modules
-
-
-def _zero(width):
-    if not width:
-        return "1'b0"
-    m = re.fullmatch(r"\s*(\d+)\s*:\s*(\d+)\s*", width)
-    if m:
-        return f"{abs(int(m.group(1)) - int(m.group(2))) + 1}'b0"
-    return "'0"
 
 
 def _find_instance(code_lines, flagged):
@@ -121,13 +113,11 @@ def fix_source(text, lines_to_fix):
             continue
         conns = []
         for p in missing:
-            direction, width = ports[p]
+            direction, _ = ports[p]
             if direction == "output":
                 conns.append(f"/* verilator lint_off PINCONNECTEMPTY */ .{p}() "
                              f"/* verilator lint_on PINCONNECTEMPTY */")
-            elif direction == "input":
-                conns.append(f".{p}({_zero(width)})")
-            else:
+            else:  # input or inout: never tie off, skip the instance
                 conns = None
                 break
         if not conns:
