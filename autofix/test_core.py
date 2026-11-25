@@ -206,7 +206,7 @@ def test_all_rules_clear_their_warnings(design, tmp_path):
     # nothing new appeared
     assert set(res["rules_after"]) <= set(res["rules_before"])
     rules_done = {a["rule"] for a in res["attempts"]}
-    assert rules_done == {"BLKSEQ", "COMBDLY", "CASEINCOMPLETE", "WIDTHEXPAND", "WIDTHTRUNC", "UNDRIVEN", "UNUSEDSIGNAL"}
+    assert rules_done == {"BLKSEQ", "COMBDLY", "CASEINCOMPLETE", "LATCH", "WIDTHEXPAND", "WIDTHTRUNC", "UNDRIVEN", "UNUSEDSIGNAL"}
     for a in res["attempts"]:
         assert ROW_KEYS <= a.keys()
         assert "_lint_ok" not in a
