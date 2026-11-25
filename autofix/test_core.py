@@ -201,12 +201,12 @@ def test_require_pass_keeps_file_when_final_testbench_passes(tmp_path, monkeypat
 def test_all_rules_clear_their_warnings(design, tmp_path):
     res = core.fix_design({"name": design}, EXAMPLES, tmp_path, core.all_rules(), regress=False)
     assert res["status"] == "kept"
-    for rule in ("BLKSEQ", "BLKANDNBLK", "COMBDLY", "CASEINCOMPLETE", "WIDTHEXPAND", "WIDTHTRUNC", "PINMISSING"):
+    for rule in ("BLKSEQ", "BLKANDNBLK", "COMBDLY", "CASEINCOMPLETE", "WIDTHEXPAND", "WIDTHTRUNC", "SYNCASYNCNET", "PINMISSING"):
         assert rule not in res["rules_after"]
     # nothing new appeared
     assert set(res["rules_after"]) <= set(res["rules_before"])
     rules_done = {a["rule"] for a in res["attempts"]}
-    assert rules_done == {"BLKSEQ", "COMBDLY", "CASEINCOMPLETE", "LATCH", "WIDTHEXPAND", "WIDTHTRUNC", "UNDRIVEN", "UNUSEDSIGNAL", "PINMISSING"}
+    assert rules_done == {"BLKSEQ", "COMBDLY", "CASEINCOMPLETE", "LATCH", "WIDTHEXPAND", "WIDTHTRUNC", "UNDRIVEN", "UNUSEDSIGNAL", "SYNCASYNCNET", "PINMISSING"}
     for a in res["attempts"]:
         assert ROW_KEYS <= a.keys()
         assert "_lint_ok" not in a
