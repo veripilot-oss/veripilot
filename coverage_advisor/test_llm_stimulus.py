@@ -3,10 +3,10 @@
 Verifies:
 - Good snippet from mocked complete() is returned with fences stripped.
 - complete() returning None -> generate() returns None.
-- Snippets containing blocked tokens ($system, $fopen, $readmem, `include) -> None.
+- Snippets containing blocked tokens ($system, $fopen, $readmem, `include, $finish, DPI-C, etc.) -> None.
 - Snippet over ~200 lines -> None.
 - Empty uncovered items or missing design -> None.
-- Complete() exception -> None.
+- complete() exception -> None.
 - Advisor integration:
   * When generate returns a snippet, generate_targeted_stimulus uses it.
   * When generate returns None, generate_targeted_stimulus uses rule-based output.
@@ -30,12 +30,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-# ---------------------------------------------------------------------------
-# Import or contract-compliant stub for coverage_advisor modules (PR #49 & PR #50)
-# ---------------------------------------------------------------------------
 import coverage_advisor
 
-# Ensure coverage_advisor.llm_client exists
+# Ensure coverage_advisor.llm_client is present
 try:
     from coverage_advisor import llm_client
 except ImportError:
@@ -50,7 +47,7 @@ except ImportError:
     sys.modules["coverage_advisor.llm_client"] = llm_client
     setattr(coverage_advisor, "llm_client", llm_client)
 
-# Ensure coverage_advisor.llm_stimulus exists
+# Ensure coverage_advisor.llm_stimulus is present (stub if PR #49 not merged)
 try:
     from coverage_advisor import llm_stimulus
 except ImportError:
@@ -63,9 +60,16 @@ except ImportError:
         "$fopen",
         "$fwrite",
         "$fdisplay",
+        "$fscanf",
+        "$fgets",
         "$readmem",
-        "`include",
+        "$dumpfile",
+        "$finish",
+        "$stop",
         "$value$plusargs",
+        "$test$plusargs",
+        "`include",
+        'import "DPI-C"',
     )
     _MAX_LINES = 200
 
@@ -222,7 +226,7 @@ class TestLLMStimulus(unittest.TestCase):
         self.assertIsNone(res)
 
     # -----------------------------------------------------------------------
-    # 3. Blocked tokens / safety filter ($system, $fopen, $readmem, `include)
+    # 3. Blocked tokens / safety filter ($system, $fopen, $readmem, `include, etc.)
     # -----------------------------------------------------------------------
 
     @patch("coverage_advisor.llm_client.complete")
@@ -262,6 +266,13 @@ class TestLLMStimulus(unittest.TestCase):
     @patch("coverage_advisor.llm_client.complete")
     def test_rejects_file_write_operations(self, mock_complete):
         for token in ["$fwrite(f, \"data\");", "$fdisplay(f, \"line\");", "$value$plusargs(\"TEST=%s\", s);"]:
+            mock_complete.return_value = f"@(posedge clk); {token}"
+            res = llm_stimulus.generate("fifo", self.sample_uncovered)
+            self.assertIsNone(res)
+
+    @patch("coverage_advisor.llm_client.complete")
+    def test_rejects_dpi_and_finish_tokens(self, mock_complete):
+        for token in ['import "DPI-C" function void foo();', "$finish;", "$stop;", "$dumpfile(\"dump.vcd\");"]:
             mock_complete.return_value = f"@(posedge clk); {token}"
             res = llm_stimulus.generate("fifo", self.sample_uncovered)
             self.assertIsNone(res)
